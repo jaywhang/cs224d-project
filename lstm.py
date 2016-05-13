@@ -56,7 +56,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import time
+import time, sys
 
 import numpy as np
 import tensorflow as tf
@@ -154,8 +154,8 @@ class PTBModel(object):
 
     # Prepare the cell unit. Calling this cell adds one timestep of
     # of forward prop to the graph.
-    # lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=0.0)
-    lstm_cell = BNLSTMCell(size, forget_bias=0.0)
+    lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=0.0)
+    # lstm_cell = BNLSTMCell(size, forget_bias=0.0)
     if is_training and config.keep_prob < 1:
       lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
           lstm_cell, output_keep_prob=config.keep_prob)
@@ -222,6 +222,7 @@ def run_epoch(session, m, data, eval_op, verbose=False):
       print("%.3f perplexity: %.3f speed: %.0f wps" %
             (step * 1.0 / epoch_size, np.exp(costs / iters),
              iters * m.batch_size / (time.time() - start_time)))
+      sys.stdout.flush()
 
   return np.exp(costs / iters)
 
