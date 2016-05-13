@@ -61,8 +61,11 @@ import time
 import numpy as np
 import tensorflow as tf
 
+from tensorflow.models.rnn import rnn
+
 #from tensorflow.models.rnn.ptb import reader
 import reader
+from configs import *
 
 flags = tf.flags
 logging = tf.logging
@@ -74,6 +77,49 @@ flags.DEFINE_string("data_path", None, "data_path")
 
 FLAGS = flags.FLAGS
 
+def bn_linear(x, h, output_size):
+  """Does xW + b"""
+  with tf.variable_scope("Linear"):
+    Wh = tf.get_variable("Wh", [h.get_shape().as_list()[1], output_size])
+    Wx = tf.get_variable("Wx", [x.get_shape().as_list()[1], output_size])
+    b = tf.get_variable("b", [output_size],
+                        initializer=tf.constant_initializer(0.0))
+  with tf.variable_scope("BN_h"):
+    mh, vh = tf.nn.moments(h, axes=[0])
+    gamma = tf.get_variable("gamma", initializer=tf.ones([output_size])/10)
+    bn_h = tf.nn.batch_normalization(tf.matmul(h, Wh), mh, vh,
+                                      offset=None, scale=gamma, variance_epsilon=1e-3)
+  with tf.variable_scope("BN_x"):
+    mx, vx = tf.nn.moments(x, axes=[0])
+    gamma = tf.get_variable("gamma", initializer=tf.ones([output_size])/10)
+    bn_x = tf.nn.batch_normalization(tf.matmul(x, Wx), mx, vx,
+                                      offset=None, scale=gamma, variance_epsilon=1e-3)
+  return bn_h + bn_x + b
+
+class BNLSTMCell(tf.nn.rnn_cell.BasicLSTMCell):
+  def __call__(self, inputs, state, scope=None):
+    """Long short-term memory cell (LSTM)."""
+    with tf.variable_scope(scope or type(self).__name__):  # "BasicLSTMCell"
+      # Parameters of gates are concatenated into one multiply for efficiency.
+      c, h = tf.split(1, 2, state)
+
+      with tf.variable_scope("IGate"):
+        i = bn_linear(inputs, h, self._num_units)
+      with tf.variable_scope("fGate"):
+        f = bn_linear(inputs, h, self._num_units)
+      with tf.variable_scope("oGate"):
+        o = bn_linear(inputs, h, self._num_units)
+      with tf.variable_scope("new_state"):
+        j = bn_linear(inputs, h, self._num_units)
+
+      new_c = c * tf.sigmoid(f + self._forget_bias) + tf.sigmoid(i) * tf.tanh(j)
+      mc, vc = tf.nn.moments(new_c, axes=[0])
+      gamma = tf.get_variable("gamma", initializer=tf.ones([self._num_units])/10)
+      beta = tf.get_variable("beta", initializer=tf.zeros([self._num_units]))
+      bn_new_c = tf.nn.batch_normalization(new_c, mc, vc, offset=beta, scale=gamma, variance_epsilon=1e-3)
+      new_h = tf.tanh(bn_new_c) * tf.sigmoid(o)
+
+      return new_h, tf.concat(1, [new_c, new_h])
 
 class PTBModel(object):
   """The PTB model."""
@@ -84,161 +130,69 @@ class PTBModel(object):
     size = config.hidden_size
     vocab_size = config.vocab_size
 
-    self._input_data = tf.placeholder(tf.int32, [batch_size, num_steps])
-    self._targets = tf.placeholder(tf.int32, [batch_size, num_steps])
+    # Input placeholders
+    self.input_data = tf.placeholder(tf.int32, [batch_size, num_steps])
+    self.targets = tf.placeholder(tf.int32, [batch_size, num_steps])
 
-    # Slightly better results can be obtained with forget gate biases
-    # initialized to 1 but the hyperparameters of the model would need to be
-    # different than reported in the paper.
-    lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=0.0)
-    if is_training and config.keep_prob < 1:
-      lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
-          lstm_cell, output_keep_prob=config.keep_prob)
-    cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * config.num_layers)
-
-    self._initial_state = cell.zero_state(batch_size, tf.float32)
-
-    with tf.device("/cpu:0"):
-      embedding = tf.get_variable("embedding", [vocab_size, size])
-      inputs = tf.nn.embedding_lookup(embedding, self._input_data)
-
+    # Prepare embeddings
+    # This is the old code. tf.gather seems to work fine, and uses the GPU.
+    # with tf.device("/cpu:0"):
+    #   embedding = tf.get_variable("embedding", [vocab_size, size])
+    #   inputs = tf.nn.embedding_lookup(embedding, self._input_data)
+    embedding = tf.get_variable("embedding", [vocab_size, size])
+    inputs = tf.gather(embedding, self.input_data)
     if is_training and config.keep_prob < 1:
       inputs = tf.nn.dropout(inputs, config.keep_prob)
 
-    # Simplified version of tensorflow.models.rnn.rnn.py's rnn().
-    # This builds an unrolled LSTM for tutorial purposes only.
-    # In general, use the rnn() or state_saving_rnn() from rnn.py.
-    #
-    # The alternative version of the code below is:
-    #
-    # from tensorflow.models.rnn import rnn
-    # inputs = [tf.squeeze(input_, [1])
-    #           for input_ in tf.split(1, num_steps, inputs)]
-    # outputs, state = rnn.rnn(cell, inputs, initial_state=self._initial_state)
-    outputs = []
-    state = self._initial_state
-    with tf.variable_scope("RNN"):
-      for time_step in range(num_steps):
-        if time_step > 0: tf.get_variable_scope().reuse_variables()
-        (cell_output, state) = cell(inputs[:, time_step, :], state)
-        outputs.append(cell_output)
+    # Prepare the cell unit. Calling this cell adds one timestep of
+    # of forward prop to the graph.
+    lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=0.0)
+    # lstm_cell = BNLSTMCell(size, forget_bias=0.0)
+    if is_training and config.keep_prob < 1:
+      lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
+          lstm_cell, output_keep_prob=config.keep_prob)
+    # TODO(amatsukawa): keep this simple with a 1 layer BasicLSTMCell for now
+    #cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * config.num_layers)
+    cell = lstm_cell
 
+    # Initial state is zero to begin with, but during a run_epoch, the
+    # previous final_state is passed in.
+    self.initial_state = cell.zero_state(batch_size, tf.float32)
+
+    # Input is a batch_size * (num_steps * embedding) tensor.
+    # Split along num_steps so it has dim 1, and squeeze it out for a
+    # [(batch_size*embedding)] list that is num_steps long.
+    inputs = [tf.squeeze(batch_for_timestep, [1])
+               for batch_for_timestep in tf.split(1, num_steps, inputs)]
+
+    # Run the RNN len(inputs) steps.
+    outputs, state = rnn.rnn(cell, inputs, initial_state=self.initial_state)
+
+    # Make a (batch_size * hidden_size) output matrix.
     output = tf.reshape(tf.concat(1, outputs), [-1, size])
     softmax_w = tf.get_variable("softmax_w", [size, vocab_size])
     softmax_b = tf.get_variable("softmax_b", [vocab_size])
     logits = tf.matmul(output, softmax_w) + softmax_b
     loss = tf.nn.seq2seq.sequence_loss_by_example(
         [logits],
-        [tf.reshape(self._targets, [-1])],
+        [tf.reshape(self.targets, [-1])],
         [tf.ones([batch_size * num_steps])])
-    self._cost = cost = tf.reduce_sum(loss) / batch_size
-    self._final_state = state
+
+    self.cost = cost = tf.reduce_sum(loss) / batch_size
+    self.final_state = state
 
     if not is_training:
       return
 
-    self._lr = tf.Variable(0.0, trainable=False)
+    self.lr = tf.Variable(0.0, trainable=False)
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
                                       config.max_grad_norm)
     optimizer = tf.train.GradientDescentOptimizer(self.lr)
-    self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+    self.train_op = optimizer.apply_gradients(zip(grads, tvars))
 
   def assign_lr(self, session, lr_value):
     session.run(tf.assign(self.lr, lr_value))
-
-  @property
-  def input_data(self):
-    return self._input_data
-
-  @property
-  def targets(self):
-    return self._targets
-
-  @property
-  def initial_state(self):
-    return self._initial_state
-
-  @property
-  def cost(self):
-    return self._cost
-
-  @property
-  def final_state(self):
-    return self._final_state
-
-  @property
-  def lr(self):
-    return self._lr
-
-  @property
-  def train_op(self):
-    return self._train_op
-
-
-class SmallConfig(object):
-  """Small config."""
-  init_scale = 0.1
-  learning_rate = 1.0
-  max_grad_norm = 5
-  num_layers = 2
-  num_steps = 20
-  hidden_size = 200
-  max_epoch = 4
-  max_max_epoch = 13
-  keep_prob = 1.0
-  lr_decay = 0.5
-  batch_size = 20
-  vocab_size = 10000
-
-
-class MediumConfig(object):
-  """Medium config."""
-  init_scale = 0.05
-  learning_rate = 1.0
-  max_grad_norm = 5
-  num_layers = 2
-  num_steps = 35
-  hidden_size = 650
-  max_epoch = 6
-  max_max_epoch = 39
-  keep_prob = 0.5
-  lr_decay = 0.8
-  batch_size = 20
-  vocab_size = 10000
-
-
-class LargeConfig(object):
-  """Large config."""
-  init_scale = 0.04
-  learning_rate = 1.0
-  max_grad_norm = 10
-  num_layers = 2
-  num_steps = 35
-  hidden_size = 1500
-  max_epoch = 14
-  max_max_epoch = 55
-  keep_prob = 0.35
-  lr_decay = 1 / 1.15
-  batch_size = 20
-  vocab_size = 10000
-
-
-class TestConfig(object):
-  """Tiny config, for testing."""
-  init_scale = 0.1
-  learning_rate = 1.0
-  max_grad_norm = 1
-  num_layers = 1
-  num_steps = 2
-  hidden_size = 2
-  max_epoch = 1
-  max_max_epoch = 1
-  keep_prob = 1.0
-  lr_decay = 0.5
-  batch_size = 20
-  vocab_size = 10000
-
 
 def run_epoch(session, m, data, eval_op, verbose=False):
   """Runs the model on the given data."""

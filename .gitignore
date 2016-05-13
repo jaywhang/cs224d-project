@@ -61,5 +61,6 @@ target/
 #Ipython Notebook
 .ipynb_checkpoints
 
-# lang-8 corpus
+# ignore data
 lang-8-en-1.0
+ptb
