@@ -77,6 +77,13 @@ flags.DEFINE_string("data_path", None, "data_path")
 
 FLAGS = flags.FLAGS
 
+def linear(x, output_size):
+  with tf.variable_scope("Linear"):
+    W = tf.get_variable("W", [x.get_shape().as_list()[1], output_size])
+    b = tf.get_variable("b", initializer=tf.constant_initializer(0.0))
+  return tf.matmul(x, W) + b
+
+
 def bn_linear(x, h, output_size):
   """Does xW + b"""
   with tf.variable_scope("Linear"):
@@ -103,6 +110,10 @@ class BNLSTMCell(tf.nn.rnn_cell.BasicLSTMCell):
       # Parameters of gates are concatenated into one multiply for efficiency.
       c, h = tf.split(1, 2, state)
 
+      xconcat = linear(inputs, 4 * self._num_units)
+      hconcat = linear(h, 4 * self._num_units)
+
+      # i = input_gate, j = new_input, f = forget_gate, o = output_gate
       with tf.variable_scope("IGate"):
         i = bn_linear(inputs, h, self._num_units)
       with tf.variable_scope("fGate"):
