@@ -80,7 +80,7 @@ FLAGS = flags.FLAGS
 def linear(x, output_size):
   with tf.variable_scope("Linear"):
     W = tf.get_variable("W", [x.get_shape().as_list()[1], output_size])
-    b = tf.get_variable("b", initializer=tf.constant_initializer(0.0))
+    b = tf.get_variable("b", [output_size], initializer=tf.constant_initializer(0.0))
   return tf.matmul(x, W) + b
 
 
@@ -109,9 +109,6 @@ class BNLSTMCell(tf.nn.rnn_cell.BasicLSTMCell):
     with tf.variable_scope(scope or type(self).__name__):  # "BasicLSTMCell"
       # Parameters of gates are concatenated into one multiply for efficiency.
       c, h = tf.split(1, 2, state)
-
-      xconcat = linear(inputs, 4 * self._num_units)
-      hconcat = linear(h, 4 * self._num_units)
 
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
       with tf.variable_scope("IGate"):
@@ -157,8 +154,8 @@ class PTBModel(object):
 
     # Prepare the cell unit. Calling this cell adds one timestep of
     # of forward prop to the graph.
-    lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=0.0)
-    # lstm_cell = BNLSTMCell(size, forget_bias=0.0)
+    # lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=0.0)
+    lstm_cell = BNLSTMCell(size, forget_bias=0.0)
     if is_training and config.keep_prob < 1:
       lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
           lstm_cell, output_keep_prob=config.keep_prob)
