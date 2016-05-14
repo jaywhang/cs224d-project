@@ -63,4 +63,5 @@ target/
 
 # ignore data
 lang-8-en-1.0
-ptb
+ptb/*.txt
+ptb/README
