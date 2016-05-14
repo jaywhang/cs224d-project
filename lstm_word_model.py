@@ -8,7 +8,7 @@ from tensorflow.models.rnn import rnn
 import sys, time
 import numpy as np
 
-import reader
+import ptb.word_reader as reader
 from lm import RNNLanguageModel
 
 flags, logging = tf.flags, tf.logging
