@@ -10,27 +10,27 @@ import numpy as np
 
 import ptb.word_reader as reader
 from lm import RNNLanguageModel
+from configs import *
 
 flags, logging = tf.flags, tf.logging
 
-flags.DEFINE_string("data", None, "data")
+flags.DEFINE_string("data", None, "ptb data path")
+flags.DEFINE_string("config", None, "config name")
 FLAGS = flags.FLAGS
 
-class SmallConfig(object):
-  """Small config."""
-  init_scale = 0.1
-  learning_rate = 1.0
-  max_grad_norm = 5
-  num_steps = 20
-  hidden_size = 200
-  max_epoch = 4
-  max_max_epoch = 13
-  dropout_keep_prob = 1.0
-  lr_decay = 0.5
-  batch_size = 20
-  vocab_size = 10000
-  cell_class = tf.nn.rnn_cell.BasicLSTMCell
-  optimizer = tf.train.GradientDescentOptimizer
+def get_config():
+  if not FLAGS.config:
+    raise ValueError("Must set --config")
+  if FLAGS.config == "small":
+    return WordSmallConfig()
+  elif FLAGS.config == "bn_small":
+    return WordBNSmallConfig()
+  if FLAGS.config == "medium":
+    return WordMediumConfig()
+  elif FLAGS.config == "bn_medium":
+    return WordBNSmallConfig()
+  else:
+    raise ValueError("Unknown config")
 
 def run_epoch(session, config, m, data, eval_op, iters_total=0, verbose=False):
   start_time = time.time()
@@ -47,14 +47,13 @@ def run_epoch(session, config, m, data, eval_op, iters_total=0, verbose=False):
     iters += config.num_steps
     iters_total += config.num_steps
 
-    if verbose and iters_total % 5000 == 0:
+    if verbose and iters_total % 1000 == 0:
       print("%s perplexity: %.3f speed: %.0f wps" %
             (iters_total, np.exp(costs / iters),
              iters * config.batch_size / (time.time() - start_time)))
       sys.stdout.flush()
 
   return np.exp(costs / iters), iters_total
-
 
 def main(_):
   if not FLAGS.data:
@@ -63,8 +62,8 @@ def main(_):
   raw_data = reader.ptb_raw_data(FLAGS.data)
   train_data, valid_data, test_data, _ = raw_data
 
-  config = SmallConfig()
-  eval_config = SmallConfig()
+  config = get_config()
+  eval_config = get_config()
   eval_config.batch_size = 1
   eval_config.num_steps = 1
 

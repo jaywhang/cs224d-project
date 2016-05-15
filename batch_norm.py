@@ -5,25 +5,27 @@ from __future__ import print_function
 import tensorflow as tf
 from tensorflow.models.rnn import rnn
 
-def bn_linear(x, h, output_size):
+def linear(x, output_size):
   with tf.variable_scope("Linear"):
-    Wh = tf.get_variable("Wh", [h.get_shape().as_list()[1], output_size])
-    Wx = tf.get_variable("Wx", [x.get_shape().as_list()[1], output_size])
-    b = tf.get_variable("b", [output_size],
-                        initializer=tf.constant_initializer(0.0))
-  with tf.variable_scope("BN_h"):
-    hgamma = tf.get_variable("gamma", initializer=tf.ones([output_size])/10)
-    yh = tf.matmul(h, Wh)
-    mh, vh = tf.nn.moments(yh, axes=[0])
-    bn_h = tf.nn.batch_normalization(yh, mh, vh,
-              offset=None, scale=hgamma, variance_epsilon=1e-3)
-  with tf.variable_scope("BN_x"):
-    xgamma = tf.get_variable("gamma", initializer=tf.ones([output_size])/10)
-    yx = tf.matmul(x, Wx)
-    mx, vx = tf.nn.moments(yx, axes=[0])
-    bn_x = tf.nn.batch_normalization(yx, mx, vx,
-              offset=None, scale=xgamma, variance_epsilon=1e-3)
-  return bn_h + bn_x + b
+    W = tf.get_variable("W", [x.get_shape().as_list()[1], output_size])
+    return tf.matmul(x, W)
+
+def batch_norm(x, scale=True, offset=False):
+  with tf.variable_scope("BatchNorm"):
+    mean, variance = tf.nn.moments(x, axes=[0])
+    if scale:
+      gamma = tf.get_variable("gamma",
+          initializer=tf.ones([x.get_shape().as_list()[1]])/10)
+    else:
+      gamma = None
+    if offset:
+      beta = gamma = tf.get_variable("gamma",
+          initializer=tf.zeros([x.get_shape().as_list()[1]]))
+    else:
+      beta = None
+    return tf.nn.batch_normalization(x, mean, variance,
+              offset=beta, scale=gamma, variance_epsilon=1e-3)
+
 
 class BNLSTMCell(tf.nn.rnn_cell.BasicLSTMCell):
   def __call__(self, inputs, state, scope=None):
@@ -32,20 +34,15 @@ class BNLSTMCell(tf.nn.rnn_cell.BasicLSTMCell):
       # Parameters of gates are concatenated into one multiply for efficiency.
       c, h = tf.split(1, 2, state)
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-      with tf.variable_scope("IGate"):
-        i = bn_linear(inputs, h, self._num_units)
-      with tf.variable_scope("fGate"):
-        f = bn_linear(inputs, h, self._num_units)
-      with tf.variable_scope("oGate"):
-        o = bn_linear(inputs, h, self._num_units)
-      with tf.variable_scope("new_state"):
-        j = bn_linear(inputs, h, self._num_units)
+
+      with tf.variable_scope("x"):
+        xconcat = batch_norm(linear(inputs, 4*self._num_units))
+      with tf.variable_scope("h"):
+        hconcat = batch_norm(linear(h, 4*self._num_units))
+
+      i, j, f, o = [a+b for a, b in zip(tf.split(1, 4, xconcat), tf.split(1, 4, hconcat))]
 
       new_c = c * tf.sigmoid(f + self._forget_bias) + tf.sigmoid(i) * tf.tanh(j)
-      mc, vc = tf.nn.moments(new_c, axes=[0])
-      gamma = tf.get_variable("gamma", initializer=tf.ones([self._num_units])/10)
-      beta = tf.get_variable("beta", initializer=tf.zeros([self._num_units]))
-      bn_new_c = tf.nn.batch_normalization(new_c, mc, vc, offset=beta, scale=gamma, variance_epsilon=1e-3)
-      new_h = tf.tanh(bn_new_c) * tf.sigmoid(o)
+      new_h = tf.tanh(batch_norm(new_c)) * tf.sigmoid(o)
 
       return new_h, tf.concat(1, [new_c, new_h])
