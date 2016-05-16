@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import tensorflow as tf
 from tensorflow.models.rnn import rnn
+from batch_norm import *
 
 class RNNLanguageModel(object):
   """
@@ -27,7 +28,7 @@ class RNNLanguageModel(object):
 
     cell = config.cell_class(hidden_size, forget_bias=0.0)
     if is_training:
-      cell = tf.nn.rnn_cell.DropoutWrapper(cell,
+      cell = DropoutWrapper(cell,
           input_keep_prob=dropout_keep_prob, output_keep_prob=dropout_keep_prob)
 
     self.initial_state = cell.zero_state(batch_size, tf.float32)
@@ -43,8 +44,31 @@ class RNNLanguageModel(object):
 
     # this function unrolls the recursion. returns list of outputs for
     # softmax classification (dropped out) and the last hidden state.
-    outputs, self.final_state = rnn.rnn(
-        cell, inputs_by_timestep, initial_state = self.initial_state)
+
+    outputs = []
+    state = self.initial_state
+    with tf.variable_scope("RNN"):
+      for time_step in range(1, num_steps):
+        tf.get_variable("xmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+        tf.get_variable("xvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+        tf.get_variable("hmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+        tf.get_variable("hvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+        tf.get_variable("cmean-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
+        tf.get_variable("cvar-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
+
+    with tf.variable_scope("RNN"):
+      for time_step in range(num_steps):
+        if time_step > 0: tf.get_variable_scope().reuse_variables()
+        xmean = tf.get_variable("xmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+        xvar = tf.get_variable("xvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+        hmean = tf.get_variable("hmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+        hvar =  tf.get_variable("hvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+        cmean = tf.get_variable("cmean-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
+        cvar = tf.get_variable("cvar-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
+        (cell_output, state) = cell(inputs_by_timestep[time_step], state, is_training,
+                                  xmean, xvar, hmean, hvar, cmean, cvar)
+        outputs.append(cell_output)
+    self.final_state = state
 
     # outputs is a list of (batch_size x hidden_size) tensors, and the list
     # is step_size long.  flatten them so that it is
