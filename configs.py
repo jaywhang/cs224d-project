@@ -24,19 +24,19 @@ class WordBNSmallConfig(WordSmallConfig):
 class WordMediumConfig(object):
   """Medium config."""
   init_scale = 0.05
-  learning_rate = 1.0
+  learning_rate = 0.002
   max_grad_norm = 5
   num_layers = 2
-  num_steps = 35
+  num_steps = 100
   hidden_size = 650
   max_epoch = 6
   max_max_epoch = 39
   dropout_keep_prob = 0.5
   lr_decay = 0.8
-  batch_size = 20
+  batch_size = 128
   vocab_size = 10000
   cell_class = tf.nn.rnn_cell.BasicLSTMCell
-  optimizer = tf.train.GradientDescentOptimizer
+  optimizer = tf.train.AdamOptimizer
 
 class WordBNMediumConfig(WordMediumConfig):
   """Small config."""

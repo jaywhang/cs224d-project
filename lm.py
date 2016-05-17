@@ -47,26 +47,30 @@ class RNNLanguageModel(object):
 
     outputs = []
     state = self.initial_state
-    with tf.variable_scope("RNN"):
-      for time_step in range(1, num_steps):
-        tf.get_variable("xmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
-        tf.get_variable("xvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
-        tf.get_variable("hmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
-        tf.get_variable("hvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
-        tf.get_variable("cmean-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
-        tf.get_variable("cvar-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
+    if config.cell_class == BNLSTMCell:
+      with tf.variable_scope("RNN"):
+        for time_step in range(1, num_steps):
+          tf.get_variable("xmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+          tf.get_variable("xvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+          tf.get_variable("hmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+          tf.get_variable("hvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+          tf.get_variable("cmean-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
+          tf.get_variable("cvar-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
 
     with tf.variable_scope("RNN"):
       for time_step in range(num_steps):
         if time_step > 0: tf.get_variable_scope().reuse_variables()
-        xmean = tf.get_variable("xmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
-        xvar = tf.get_variable("xvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
-        hmean = tf.get_variable("hmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
-        hvar =  tf.get_variable("hvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
-        cmean = tf.get_variable("cmean-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
-        cvar = tf.get_variable("cvar-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
-        (cell_output, state) = cell(inputs_by_timestep[time_step], state, is_training,
+        if config.cell_class == BNLSTMCell:
+          xmean = tf.get_variable("xmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+          xvar = tf.get_variable("xvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+          hmean = tf.get_variable("hmean-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+          hvar =  tf.get_variable("hvar-%s" % time_step, initializer=tf.zeros([4*hidden_size]), trainable=False)
+          cmean = tf.get_variable("cmean-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
+          cvar = tf.get_variable("cvar-%s" % time_step, initializer=tf.zeros([hidden_size]), trainable=False)
+          (cell_output, state) = cell(inputs_by_timestep[time_step], state, is_training,
                                   xmean, xvar, hmean, hvar, cmean, cvar)
+        else:
+          (cell_output, state) = cell(inputs_by_timestep[time_step], state)
         outputs.append(cell_output)
     self.final_state = state
 

@@ -27,9 +27,9 @@ def batch_norm(x, xmean, xvar, is_training, scale=True, offset=False):
   if is_training:
     mean, variance = tf.nn.moments(x, axes=[0])
     update_moving_mean = moving_averages.assign_moving_average(
-        xmean, mean, 0.99)
+        xmean, mean, 0.9)
     update_moving_variance = moving_averages.assign_moving_average(
-        xvar, variance, 0.99)
+        xvar, variance, 0.9)
     control_inputs = [update_moving_mean, update_moving_variance]
   else:
     mean = xmean

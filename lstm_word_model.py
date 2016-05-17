@@ -28,7 +28,7 @@ def get_config():
   if FLAGS.config == "medium":
     return WordMediumConfig()
   elif FLAGS.config == "bn_medium":
-    return WordBNSmallConfig()
+    return WordBNMediumConfig()
   else:
     raise ValueError("Unknown config")
 
@@ -39,7 +39,7 @@ def run_epoch(session, config, m, data, eval_op, iters_total=0, verbose=False):
 
   for step, (x, y) in enumerate(reader.ptb_iterator(data, config.batch_size,
                                                     config.num_steps)):
-    cost, state, _ = session.run([m.cost, m.final_state, eval_op],
+    cost, _, _ = session.run([m.cost, m.final_state, eval_op],
                                  {m.input_data: x,
                                   m.targets: y,
                                   m.initial_state: state})
@@ -81,11 +81,14 @@ def main(_):
     tf.initialize_all_variables().run()
 
     iters_total = 0
-    for i in range(config.max_max_epoch):
-      lr_decay = config.lr_decay ** max(i - config.max_epoch, 0.0)
-      session.run(tf.assign(m.lr, config.learning_rate * lr_decay))
 
-      logging.info("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
+    train_writer = tf.train.SummaryWriter('train', session.graph)
+
+    for i in range(config.max_max_epoch):
+      #lr_decay = config.lr_decay ** max(i - config.max_epoch, 0.0)
+      session.run(tf.assign(m.lr, config.learning_rate))
+
+      print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
       train_perplexity, iters_total = run_epoch(session, config, m, train_data,
           m.train_op, iters_total=iters_total, verbose=True)
       print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
