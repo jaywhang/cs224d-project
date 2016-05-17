@@ -98,9 +98,9 @@ class DropoutWrapper(tf.nn.rnn_cell.RNNCell):
     """Run the cell with the declared dropouts."""
     if (not isinstance(self._input_keep_prob, float) or
         self._input_keep_prob < 1):
-      inputs = nn_ops.dropout(inputs, self._input_keep_prob, seed=self._seed)
+      inputs = tf.nn.dropout(inputs, self._input_keep_prob, seed=self._seed)
     output, new_state = self._cell(inputs, state, *moreargs)
     if (not isinstance(self._output_keep_prob, float) or
         self._output_keep_prob < 1):
-      output = nn_ops.dropout(output, self._output_keep_prob, seed=self._seed)
+      output = tf.nn.dropout(output, self._output_keep_prob, seed=self._seed)
     return output, new_state
