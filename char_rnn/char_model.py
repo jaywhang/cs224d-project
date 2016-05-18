@@ -52,9 +52,10 @@ class CharacterModel(object):
     self._probs = tf.nn.softmax(self._logits)
 
     # Average cross-entropy loss within the batch.
-    batch_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+    loss_tensor = tf.nn.sparse_softmax_cross_entropy_with_logits(
       self._logits, tf.reshape(self._target_seq, [-1]))
-    self._loss = tf.reduce_mean(batch_loss)
+    self._batch_loss = tf.reduce_sum(loss_tensor)
+    self._loss = tf.reduce_mean(loss_tensor)
     self._perplexity = tf.exp(self._loss)
 
     # Optimizer
@@ -96,6 +97,10 @@ class CharacterModel(object):
   @property
   def loss(self):
     return self._loss
+
+  @property
+  def batch_loss(self):
+    return self._batch_loss
 
   @property
   def perplexity(self):
@@ -147,6 +152,7 @@ class CharacterModelConfig(object):
     self.keep_prob = 0.5
     self.learning_rate = 0.001
     self.vocab_size = vocab_size
+    self.max_epoch = 50
 
     if inference:
       self.batch_size = self.seq_length = 1
