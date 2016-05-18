@@ -27,13 +27,13 @@ class WordMediumConfig(object):
   learning_rate = 0.002
   max_grad_norm = 5
   num_layers = 2
-  num_steps = 100
+  num_steps = 20
   hidden_size = 650
   max_epoch = 6
   max_max_epoch = 39
   dropout_keep_prob = 0.5
   lr_decay = 0.8
-  batch_size = 128
+  batch_size = 64
   vocab_size = 10000
   cell_class = tf.nn.rnn_cell.BasicLSTMCell
   optimizer = tf.train.AdamOptimizer

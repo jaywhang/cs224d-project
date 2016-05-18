@@ -39,7 +39,7 @@ def run_epoch(session, config, m, data, eval_op, iters_total=0, verbose=False):
 
   for step, (x, y) in enumerate(reader.ptb_iterator(data, config.batch_size,
                                                     config.num_steps)):
-    cost, _, _ = session.run([m.cost, m.final_state, eval_op],
+    cost, state, _ = session.run([m.cost, m.final_state, eval_op],
                                  {m.input_data: x,
                                   m.targets: y,
                                   m.initial_state: state})
