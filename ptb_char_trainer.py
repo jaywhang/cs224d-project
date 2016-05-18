@@ -99,11 +99,11 @@ def main(_):
       print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
 
       _, _, valid_perplexity = run_epoch(
-          sess, valid_config, valid_model, valid_data, tf.no_op(), verbose=True)
+          sess, valid_config, valid_model, valid_data, tf.no_op(), verbose=False)
       print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
     _, _, test_perplexity = run_epoch(
-        sess, test_config, test_model, test_data, tf.no_op(), verbose=True)
+        sess, test_config, test_model, test_data, tf.no_op(), verbose=False)
     print("Test Perplexity: %.3f" % test_perplexity)
 
   print (iter_pp)
