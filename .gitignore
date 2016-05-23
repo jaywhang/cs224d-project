@@ -62,7 +62,7 @@ target/
 .ipynb_checkpoints
 
 # ignore data
-lang-8-en-1.0
-ptb/*.txt
-ptb/simple*
-ptb/README
+lang-8-en-1.0/*
+!lang-8-en-1.0/lang8_reader.py
+ptb/*
+!ptb/*.py

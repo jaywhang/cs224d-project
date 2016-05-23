@@ -10,8 +10,8 @@ import sys, time
 import numpy as np
 
 import ptb.word_reader as reader
-from char_rnn.char_model import CharacterModel
-from char_rnn.char_model import CharacterModelConfig
+from char_model import CharacterModel
+from char_model import CharacterModelConfig
 
 flags, logging = tf.flags, tf.logging
 
