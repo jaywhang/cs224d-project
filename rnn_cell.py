@@ -25,6 +25,8 @@ from __future__ import print_function
 import tensorflow as tf
 from tensorflow.python.training import moving_averages
 
+from util import *
+
 class RNNCell(object):
   """Abstract class for an RNN cell"""
   def __call__(self, inputs, state):
@@ -55,15 +57,17 @@ class BasicLSTMCell(RNNCell):
 
     # h' = hH + xW + b
     with tf.variable_scope("BasicLSTMCell"):
-      tf.get_variable("H", [self._num_units, 4*self._num_units])
-      tf.get_variable("W", [self._input_size, 4*self._num_units])
+      tf.get_variable("H", [self._num_units, 4*self._num_units],
+          initializer=orthogonal_initializer)
+      tf.get_variable("W", [self._input_size, 4*self._num_units],
+          initializer=orthogonal_initializer)
       tf.get_variable("b", [4*self._num_units])
 
   def __call__(self, inputs, state):
     with tf.variable_scope("BasicLSTMCell", reuse=True):
-      H = tf.get_variable("H", [self._num_units, 4*self._num_units])
-      W = tf.get_variable("W", [self._input_size, 4*self._num_units])
-      b = tf.get_variable("b", [4*self._num_units])
+      H = tf.get_variable("H")
+      W = tf.get_variable("W")
+      b = tf.get_variable("b")
 
     c, h = tf.split(1, 2, state)
     concat = tf.matmul(h, H) + tf.matmul(inputs, W) + b
@@ -115,14 +119,14 @@ class BNLSTMCell(BasicLSTMCell):
                 scale=gamma, offset=beta, variance_epsilon=variance_epsilon)
   def __call__(self, inputs, state, time_step):
     with tf.variable_scope("BasicLSTMCell", reuse=True):
-      H = tf.get_variable("H", [self._num_units, 4*self._num_units])
-      W = tf.get_variable("W", [self._input_size, 4*self._num_units])
-      b = tf.get_variable("b", [4*self._num_units])
+      H = tf.get_variable("H")
+      W = tf.get_variable("W")
+      b = tf.get_variable("b")
 
     with tf.variable_scope("BatchNorm", reuse=True):
-      xgamma = tf.get_variable("xgamma", initializer=tf.ones([4*self._num_units])/10)
-      hgamma = tf.get_variable("hgamma", initializer=tf.ones([4*self._num_units])/10)
-      cgamma = tf.get_variable("cgamma", initializer=tf.ones([self._num_units])/10)
+      xgamma = tf.get_variable("xgamma")
+      hgamma = tf.get_variable("hgamma")
+      cgamma = tf.get_variable("cgamma")
       cbeta = tf.get_variable("cbeta")
 
     with tf.variable_scope("BN-Stats-T%s" % time_step):

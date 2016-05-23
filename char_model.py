@@ -1,8 +1,8 @@
 # Simple character-level language model.
 
-import numpy as np
 import tensorflow as tf
 import rnn_cell
+from util import *
 
 class CharacterModel(object):
   def __init__(self, config, is_training):
@@ -70,7 +70,8 @@ class CharacterModel(object):
 
     # Softmax
     softmax_w = tf.get_variable('softmax_w',
-                                [config.vocab_size, config.hidden_size])
+                                [config.vocab_size, config.hidden_size],
+                                initializer=orthogonal_initializer)
     softmax_b = tf.get_variable('softmax_b', [config.vocab_size])
     self._logits = tf.matmul(outputs, tf.transpose(softmax_w)) + softmax_b
     self._probs = tf.nn.softmax(self._logits)

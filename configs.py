@@ -7,6 +7,7 @@ class CharacterModelLSTMConfig(object):
     self.batch_size = 64
     self.hidden_size = 500
     self.seq_length = 100
+    self.init_scale = 0.1
     self.hidden_depth = 1  # not used
     self.keep_prob = 0.5
     self.learning_rate = 0.002

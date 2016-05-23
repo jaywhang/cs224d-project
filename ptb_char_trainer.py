@@ -79,7 +79,6 @@ def main(_):
   with tf.Graph().as_default(), tf.Session() as sess:
     initializer = tf.random_uniform_initializer(-config.init_scale,
                                                config.init_scale)
-
     with tf.variable_scope('model', reuse=None, initializer=initializer):
       train_model = CharacterModel(config, is_training=True)
     with tf.variable_scope('model', reuse=True, initializer=initializer):
