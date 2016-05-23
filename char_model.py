@@ -16,10 +16,9 @@ class CharacterModel(object):
                                       [None, config.seq_length],
                                       name='target_seq')
 
-    with tf.device("/cpu:0"):
-      embedding = tf.get_variable('embedding',
-                                  [config.vocab_size, config.hidden_size])
-      inputs = tf.gather(embedding, self._input_seq)
+    embedding = tf.get_variable('embedding',
+                                [config.vocab_size, config.hidden_size])
+    inputs = tf.gather(embedding, self._input_seq)
 
     # Hidden layers: stacked LSTM cells with Dropout.
     cell = rnn_cell.BasicLSTMCell(config.hidden_size)
