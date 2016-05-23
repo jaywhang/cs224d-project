@@ -1,11 +1,11 @@
 # Simple character-level language model.
 
-import numpy as np
 import tensorflow as tf
 import rnn_cell
+from util import *
 
 class CharacterModel(object):
-  def __init__(self, config):
+  def __init__(self, config, is_training):
     self._config = config
 
     # Input placeholders
@@ -16,20 +16,31 @@ class CharacterModel(object):
                                       [None, config.seq_length],
                                       name='target_seq')
 
+    self._is_training = is_training
+
     with tf.device("/cpu:0"):
       embedding = tf.get_variable('embedding',
                                   [config.vocab_size, config.hidden_size])
       inputs = tf.gather(embedding, self._input_seq)
 
     # Hidden layers: stacked LSTM cells with Dropout.
-    cell = rnn_cell.BasicLSTMCell(config.hidden_size)
+    if config.cell_type == rnn_cell.BasicLSTMCell:
+      cell = rnn_cell.BasicLSTMCell(config.hidden_size)
+    elif config.cell_type == rnn_cell.BNLSTMCell:
+      cell = rnn_cell.BNLSTMCell(is_training, config.hidden_size)
+    else:
+      raise ValueError("Unknown cell_type")
 
     # Apply dropout.
-    self._cell = cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=config.keep_prob)
+    if is_training:
+      cell = rnn_cell.DropoutWrapper(cell,
+        input_keep_prob=config.keep_prob, output_keep_prob=config.keep_prob)
 
     # No implementation of MultiRNNCell in our own rnn_cell.py yet
     # self._multi_cell = multi_cell = (
     #  tf.nn.rnn_cell.MultiRNNCell([cell] * config.hidden_depth))
+
+    self._cell = cell
 
     # Placeholder for initial hidden state.
     self._initial_state = tf.placeholder(tf.float32,
@@ -44,7 +55,13 @@ class CharacterModel(object):
     state = self._initial_state
     outputs = []
     for time_step in range(config.seq_length):
-      cell_output, state = cell(split_input[time_step], state)
+      if config.cell_type == rnn_cell.BasicLSTMCell:
+        cell_output, state = cell(split_input[time_step], state)
+      elif config.cell_type == rnn_cell.BNLSTMCell:
+        cell_output, state = cell(split_input[time_step], state,
+                                    time_step=time_step)
+      else:
+        raise ValueError("Unknown cell_type")
       outputs.append(cell_output)
     self._final_state = state
 
@@ -53,7 +70,8 @@ class CharacterModel(object):
 
     # Softmax
     softmax_w = tf.get_variable('softmax_w',
-                                [config.vocab_size, config.hidden_size])
+                                [config.vocab_size, config.hidden_size],
+                                initializer=orthogonal_initializer)
     softmax_b = tf.get_variable('softmax_b', [config.vocab_size])
     self._logits = tf.matmul(outputs, tf.transpose(softmax_w)) + softmax_b
     self._probs = tf.nn.softmax(self._logits)
@@ -66,8 +84,11 @@ class CharacterModel(object):
     self._perplexity = tf.exp(self._loss)
 
     # Optimizer
+    tvars = tf.trainable_variables()
+    grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars),
+                                        config.max_grad_norm)
     optimizer = tf.train.AdamOptimizer(config.learning_rate)
-    self._train_op = optimizer.minimize(self._loss)
+    self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
   @property
   def config(self):
@@ -114,6 +135,10 @@ class CharacterModel(object):
     return self._perplexity
 
   @property
+  def is_training(self):
+    return self._is_training
+
+  @property
   def zero_state(self):
     return self._cell.zero_state(self._config.batch_size, tf.float32)
 
@@ -145,27 +170,3 @@ class CharacterModel(object):
       result.append(new_idx)
 
     return result
-
-
-# Class holding model configuration.
-
-class CharacterModelConfig(object):
-  def __init__(self, vocab_size, inference=False):
-    # Default model parameters
-    self.batch_size = 256
-    self.hidden_size = 512
-    self.seq_length = 50
-    self.hidden_depth = 3
-    self.keep_prob = 0.5
-    self.learning_rate = 0.001
-    self.vocab_size = vocab_size
-    self.max_epoch = 50
-
-    if inference:
-      self.batch_size = self.seq_length = 1
-      self.keep_prob = 1.0
-
-  def __str__(self):
-    return ('Model Config:\n' +
-            '\n'.join(['  -> %s: %s' % (k,v)
-                       for k,v in self.__dict__.iteritems()]))
