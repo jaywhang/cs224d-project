@@ -1,5 +1,8 @@
 # Simple character-level language model.
 
+import sys
+import time
+
 import numpy as np
 import tensorflow as tf
 import rnn_cell
@@ -24,7 +27,8 @@ class CharacterModel(object):
     cell = rnn_cell.BasicLSTMCell(config.hidden_size)
 
     # Apply dropout.
-    self._cell = cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=config.keep_prob)
+    self._cell = cell = rnn_cell.DropoutWrapper(
+        cell, output_keep_prob=config.keep_prob)
 
     # No implementation of MultiRNNCell in our own rnn_cell.py yet
     # self._multi_cell = multi_cell = (
@@ -39,7 +43,6 @@ class CharacterModel(object):
                    for _input in tf.split(1, config.seq_length, inputs)]
 
     # Create the recurrent network.
-
     state = self._initial_state
     outputs = []
     for time_step in range(config.seq_length):
@@ -60,12 +63,11 @@ class CharacterModel(object):
     # Average cross-entropy loss within the batch.
     loss_tensor = tf.nn.sparse_softmax_cross_entropy_with_logits(
       self._logits, tf.reshape(self._target_seq, [-1]))
-    self._batch_loss = tf.reduce_sum(loss_tensor)
     self._loss = tf.reduce_mean(loss_tensor)
     self._perplexity = tf.exp(self._loss)
 
     # Optimizer
-    optimizer = tf.train.AdamOptimizer(config.learning_rate)
+    optimizer = config.optimizer(config.learning_rate)
     self._train_op = optimizer.minimize(self._loss)
 
   @property
@@ -105,10 +107,6 @@ class CharacterModel(object):
     return self._loss
 
   @property
-  def batch_loss(self):
-    return self._batch_loss
-
-  @property
   def perplexity(self):
     return self._perplexity
 
@@ -116,8 +114,33 @@ class CharacterModel(object):
   def zero_state(self):
     return self._cell.zero_state(self._config.batch_size, tf.float32)
 
-  def sample_indices(self, sess, indices, length, temperature=1.0):
-    def sample_next_index(_idx, _state):
+  def run_epoch(self, sess, config, data_iterator, verbose=True):
+    """Runs one epoch of training."""
+    start_time = time.time()
+    losses = []
+    state, = sess.run([self.zero_state])
+
+    for inputs, labels, i, num_batches in data_iterator:
+      loss, _, state = sess.run(
+          [self.loss, self.train_op, self.final_state],
+          feed_dict={self.input_seq: inputs,
+                     self.target_seq: labels,
+                     self.initial_state: state})
+      losses.append(loss)
+
+      if verbose and i % 10 == 0:
+        sys.stdout.write('\r{} / {} : loss = {:4f}, pp = {:2f}'.format(
+              i, num_batches-1, loss, np.exp(loss)))
+        sys.stdout.flush()
+
+    elapsed = time.time() - start_time
+    if verbose:
+      sys.stdout.write('\rEpoch finished in {:4f} sec.\n'.format(elapsed))
+
+    return losses, num_batches
+
+  def sample(self, sess, indices, length, temperature=1.0):
+    def sample_next(_idx, _state):
       new_state, logits = sess.run(
           [self._final_state, self._logits],
           feed_dict={self._input_seq: [[_idx]], self._initial_state: _state})
@@ -136,11 +159,11 @@ class CharacterModel(object):
 
     # Warm up
     for idx in indices[:-1]:
-      _, state = sample_next_index(idx, state)
+      _, state = sample_next(idx, state)
 
     # Start sampling
     for _ in xrange(length):
-      new_idx, state = sample_next_index(result[-1], state)
+      new_idx, state = sample_next(result[-1], state)
       result.append(new_idx)
 
     return result
@@ -159,6 +182,7 @@ class CharacterModelConfig(object):
     self.learning_rate = 0.001
     self.vocab_size = vocab_size
     self.max_epoch = 50
+    self.optimizer = tf.train.AdamOptimizer
 
     if inference:
       self.batch_size = self.seq_length = 1
