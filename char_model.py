@@ -24,11 +24,12 @@ class CharacterModel(object):
     inputs = tf.gather(embedding, self._input_seq)
 
     # Hidden layers: stacked LSTM cells with Dropout.
-    cell = rnn_cell.BasicLSTMCell(config.hidden_size)
+    self._cell = cell = rnn_cell.BasicLSTMCell(config.hidden_size)
 
-    # Apply dropout.
-    self._cell = cell = rnn_cell.DropoutWrapper(
-        cell, output_keep_prob=config.keep_prob)
+    # Apply dropout if we're training.
+    if not config.inference:
+      self._cell = cell = rnn_cell.DropoutWrapper(
+          cell, output_keep_prob=config.keep_prob)
 
     # No implementation of MultiRNNCell in our own rnn_cell.py yet
     # self._multi_cell = multi_cell = (
@@ -117,16 +118,17 @@ class CharacterModel(object):
   def run_epoch(self, sess, config, data_iterator, verbose=True):
     """Runs one epoch of training."""
     start_time = time.time()
-    losses = []
+    losses, perplexities = [], []
     state, = sess.run([self.zero_state])
 
     for inputs, labels, i, num_batches in data_iterator:
-      loss, _, state = sess.run(
-          [self.loss, self.train_op, self.final_state],
+      loss, perp, _, state = sess.run(
+          [self.loss, self.perplexity, self.train_op, self.final_state],
           feed_dict={self.input_seq: inputs,
                      self.target_seq: labels,
                      self.initial_state: state})
       losses.append(loss)
+      perplexities.append(perp)
 
       if verbose and (i % 10 == 0 or i == num_batches-1):
         sys.stdout.write('\r{} / {} : loss = {:.4f}, perp = {:.3f}'.format(
@@ -138,9 +140,11 @@ class CharacterModel(object):
       print ('\nEpoch finished in {} iterations ({:.2f} sec).'
              .format(num_batches, elapsed))
 
-    return losses, num_batches
+    return losses, perplexities, num_batches
 
   def sample(self, sess, indices, length, temperature=1.0):
+    assert self._config.inference, 'This model has config for training.'
+
     def sample_next(_idx, _state):
       new_state, logits = sess.run(
           [self._final_state, self._logits],
@@ -184,6 +188,7 @@ class CharacterModelConfig(object):
     self.vocab_size = vocab_size
     self.max_epoch = 50
     self.optimizer = tf.train.AdamOptimizer
+    self.inference = False
 
     if inference:
       self.batch_size = self.seq_length = 1

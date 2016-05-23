@@ -46,6 +46,7 @@ def main(_):
   train_config.keep_prob = 0.5
 
   valid_config = deepcopy(train_config)
+  valid_config.inference = True
   valid_config.batch_size = valid_config.seq_length = 1
   valid_config.keep_prob = 1.0
   test_config = deepcopy(valid_config)
@@ -61,18 +62,20 @@ def main(_):
       test_model = CharacterModel(test_config)
 
     tf.initialize_all_variables().run()
-    losses = []
+    losses, perps = [], []
     iters_total = 0
 
     for i in xrange(1, train_config.max_epoch+1):
       print('Starting epoch %d / %d' % (i, train_config.max_epoch))
       train_iterator = train_reader.iterator(
           train_config.batch_size, train_config.seq_length)
-      new_losses, num_batches = train_model.run_epoch(
+      new_losses, new_perps, num_batches = train_model.run_epoch(
           sess, train_config, train_iterator)
       losses.extend(new_losses)
+      perps.extend(new_perps)
       iters_total += num_batches
-      print(' --> Average loss: %.4f' % np.mean(new_losses))
+      print(' --> Average loss: %.4f, perp: %.4f' %
+            (np.mean(new_losses), np.mean(new_perps)))
 
       if FLAGS.sample_during_training:
         sample = test_reader.decode(
