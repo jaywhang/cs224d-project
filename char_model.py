@@ -1,11 +1,14 @@
 # Simple character-level language model.
 
+import sys
+import time
+import numpy as np
 import tensorflow as tf
 import rnn_cell
 from util import *
 
 class CharacterModel(object):
-  def __init__(self, config, is_training):
+  def __init__(self, config):
     self._config = config
 
     # Input placeholders
@@ -16,24 +19,21 @@ class CharacterModel(object):
                                       [None, config.seq_length],
                                       name='target_seq')
 
-    self._is_training = is_training
-
-    with tf.device("/cpu:0"):
-      embedding = tf.get_variable('embedding',
-                                  [config.vocab_size, config.hidden_size])
-      inputs = tf.gather(embedding, self._input_seq)
+    embedding = tf.get_variable('embedding',
+                                [config.vocab_size, config.hidden_size])
+    inputs = tf.gather(embedding, self._input_seq)
 
     # Hidden layers: stacked LSTM cells with Dropout.
     if config.cell_type == rnn_cell.BasicLSTMCell:
       cell = rnn_cell.BasicLSTMCell(config.hidden_size)
     elif config.cell_type == rnn_cell.BNLSTMCell:
-      cell = rnn_cell.BNLSTMCell(is_training, config.hidden_size)
+      cell = rnn_cell.BNLSTMCell(config.is_training, config.hidden_size)
     else:
       raise ValueError("Unknown cell_type")
 
-    # Apply dropout.
-    if is_training:
-      cell = rnn_cell.DropoutWrapper(cell,
+    # Apply dropout if we're training.
+    if config.is_training:
+      self._cell = cell = rnn_cell.DropoutWrapper(cell,
         input_keep_prob=config.keep_prob, output_keep_prob=config.keep_prob)
 
     # No implementation of MultiRNNCell in our own rnn_cell.py yet
@@ -51,7 +51,6 @@ class CharacterModel(object):
                    for _input in tf.split(1, config.seq_length, inputs)]
 
     # Create the recurrent network.
-
     state = self._initial_state
     outputs = []
     for time_step in range(config.seq_length):
@@ -71,7 +70,8 @@ class CharacterModel(object):
     # Softmax
     softmax_w = tf.get_variable('softmax_w',
                                 [config.vocab_size, config.hidden_size],
-                                initializer=orthogonal_initializer)
+                                #initializer=orthogonal_initializer)
+                                initializer=None)
     softmax_b = tf.get_variable('softmax_b', [config.vocab_size])
     self._logits = tf.matmul(outputs, tf.transpose(softmax_w)) + softmax_b
     self._probs = tf.nn.softmax(self._logits)
@@ -79,7 +79,6 @@ class CharacterModel(object):
     # Average cross-entropy loss within the batch.
     loss_tensor = tf.nn.sparse_softmax_cross_entropy_with_logits(
       self._logits, tf.reshape(self._target_seq, [-1]))
-    self._batch_loss = tf.reduce_sum(loss_tensor)
     self._loss = tf.reduce_mean(loss_tensor)
     self._perplexity = tf.exp(self._loss)
 
@@ -87,7 +86,7 @@ class CharacterModel(object):
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars),
                                         config.max_grad_norm)
-    optimizer = tf.train.AdamOptimizer(config.learning_rate)
+    optimizer = config.optimizer(config.learning_rate)
     self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
   @property
@@ -127,23 +126,50 @@ class CharacterModel(object):
     return self._loss
 
   @property
-  def batch_loss(self):
-    return self._batch_loss
-
-  @property
   def perplexity(self):
     return self._perplexity
-
-  @property
-  def is_training(self):
-    return self._is_training
 
   @property
   def zero_state(self):
     return self._cell.zero_state(self._config.batch_size, tf.float32)
 
-  def sample_indices(self, sess, indices, length, temperature=1.0):
-    def sample_next_index(_idx, _state):
+  def run_epoch(self, sess, data_iterator, verbose=True):
+    """Runs one epoch of training."""
+    start_time = time.time()
+    losses, perplexities = [], []
+    state, = sess.run([self.zero_state])
+
+    if self._config.is_training:
+      op = self.train_op
+    else:
+      op = tf.no_op()
+
+    for inputs, labels, i, num_batches in data_iterator:
+      loss, perp, _, state = sess.run(
+          [self.loss, self.perplexity, op, self.final_state],
+          feed_dict={self.input_seq: inputs,
+                     self.target_seq: labels,
+                     self.initial_state: state})
+      losses.append(loss)
+      perplexities.append(perp)
+
+      if verbose and (i % 10 == 0 or i == num_batches-1):
+        sys.stdout.write('\r{} / {} : loss = {:.4f}, perp = {:.3f}'.format(
+              i+1, num_batches, loss, np.exp(loss)))
+        sys.stdout.flush()
+
+    elapsed = time.time() - start_time
+    if verbose:
+      print ('\nEpoch finished in {} iterations ({:.2f} sec).'
+             .format(num_batches, elapsed))
+
+    return losses, perplexities, num_batches
+
+  def sample(self, sess, indices, length, temperature=1.0):
+    assert not self._config.is_training, 'This model has config for training.'
+    assert indices, 'Must provide at least one token.'
+
+    def sample_next(_idx, _state):
       new_state, logits = sess.run(
           [self._final_state, self._logits],
           feed_dict={self._input_seq: [[_idx]], self._initial_state: _state})
@@ -161,12 +187,14 @@ class CharacterModel(object):
     state = self.zero_state.eval()
 
     # Warm up
-    for idx in indices[:-1]:
-      _, state = sample_next_index(idx, state)
+    if len(indices) > 1:
+      for idx in indices[:-1]:
+        _, state = sample_next(idx, state)
 
     # Start sampling
     for _ in xrange(length):
-      new_idx, state = sample_next_index(result[-1], state)
+      new_idx, state = sample_next(result[-1], state)
       result.append(new_idx)
 
     return result
+
