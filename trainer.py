@@ -11,6 +11,9 @@ flags, logging = tf.flags, tf.logging
 
 flags.DEFINE_string('data_path', None, 'path to data file/folder')
 flags.DEFINE_string('data_type', 'text', 'type of training data.')
+flags.DEFINE_string('sample_during_training', True,
+                    'if True, produce sample phrases after every epoch')
+
 FLAGS = flags.FLAGS
 
 
@@ -34,12 +37,13 @@ def main(_):
                      % FLAGS.data_type)
 
   train_config = CharacterModelConfig(train_reader.vocab_size)
-  train_config.hidden_depth = 1
-  train_config.batch_size = 32
-  train_config.hidden_size = 128
-  train_config.learning_rate = 0.005
+  # train_config.hidden_depth = 1
+  train_config.batch_size = 64
+  train_config.hidden_size = 512
+  train_config.learning_rate = 0.002
   train_config.seq_length = 50
-  train_config.max_epoch = 5
+  train_config.max_epoch = 50
+  train_config.keep_prob = 0.5
 
   valid_config = deepcopy(train_config)
   valid_config.batch_size = valid_config.seq_length = 1
@@ -60,15 +64,24 @@ def main(_):
     losses = []
     iters_total = 0
 
-    for i in range(train_config.max_epoch):
+    for i in xrange(1, train_config.max_epoch+1):
+      print('Starting epoch %d / %d' % (i, train_config.max_epoch))
       train_iterator = train_reader.iterator(
           train_config.batch_size, train_config.seq_length)
       new_losses, num_batches = train_model.run_epoch(
           sess, train_config, train_iterator)
       losses.extend(new_losses)
       iters_total += num_batches
-      print('Epoch: %d average loss: %.4f' % (i, np.mean(new_losses)))
-      print('  Total iterations: %d' % iters_total)
+      print(' --> Average loss: %.4f' % np.mean(new_losses))
+
+      if FLAGS.sample_during_training:
+        sample = test_reader.decode(
+            test_model.sample(sess, test_reader.encode('I'), 20))
+        sample = ''.join(sample)
+        print(' --> Sample from epoch %d:' % i)
+        print('---------------------------')
+        print(sample)
+        print('---------------------------\n')
 
       # TODO: Add valid + test loss calculation
 

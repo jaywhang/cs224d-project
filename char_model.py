@@ -128,14 +128,15 @@ class CharacterModel(object):
                      self.initial_state: state})
       losses.append(loss)
 
-      if verbose and i % 10 == 0:
-        sys.stdout.write('\r{} / {} : loss = {:4f}, pp = {:2f}'.format(
-              i, num_batches-1, loss, np.exp(loss)))
+      if verbose and (i % 10 == 0 or i == num_batches-1):
+        sys.stdout.write('\r{} / {} : loss = {:.4f}, perp = {:.3f}'.format(
+              i+1, num_batches, loss, np.exp(loss)))
         sys.stdout.flush()
 
     elapsed = time.time() - start_time
     if verbose:
-      sys.stdout.write('\rEpoch finished in {:4f} sec.\n'.format(elapsed))
+      print ('\nEpoch finished in {} iterations ({:.2f} sec).'
+             .format(num_batches, elapsed))
 
     return losses, num_batches
 
@@ -174,12 +175,12 @@ class CharacterModel(object):
 class CharacterModelConfig(object):
   def __init__(self, vocab_size, inference=False):
     # Default model parameters
-    self.batch_size = 256
+    self.batch_size = 128
     self.hidden_size = 512
-    self.seq_length = 50
-    self.hidden_depth = 3
+    self.seq_length = 10
+    self.hidden_depth = 1
     self.keep_prob = 0.5
-    self.learning_rate = 0.001
+    self.learning_rate = 0.01
     self.vocab_size = vocab_size
     self.max_epoch = 50
     self.optimizer = tf.train.AdamOptimizer
