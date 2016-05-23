@@ -11,6 +11,7 @@ class CharacterModelLSTMConfig(object):
     self.keep_prob = 0.5
     self.learning_rate = 0.002
     self.max_epoch = 50
+    self.max_grad_norm = 1.0
     self.vocab_size = vocab_size
     self.cell_type = rnn_cell.BasicLSTMCell
 

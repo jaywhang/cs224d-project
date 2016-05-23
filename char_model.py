@@ -83,8 +83,11 @@ class CharacterModel(object):
     self._perplexity = tf.exp(self._loss)
 
     # Optimizer
+    tvars = tf.trainable_variables()
+    grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars),
+                                        config.max_grad_norm)
     optimizer = tf.train.AdamOptimizer(config.learning_rate)
-    self._train_op = optimizer.minimize(self._loss)
+    self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
   @property
   def config(self):
