@@ -54,12 +54,12 @@ def save_losses(loss_pp, epoch_losses, output_dir):
   with open(os.path.join(output_dir, 'iter_loss_pp.csv'), 'w') as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (loss, perp) in enumerate(loss_pp):
-      writer.writerow((i, loss, perp))
+      writer.writerow((i+1, loss, perp))
 
   with open(os.path.join(output_dir, 'train_valid_loss.csv'), 'w') as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (train_loss, valid_loss) in enumerate(epoch_losses):
-      writer.writerow((i, train_loss, valid_loss))
+      writer.writerow((i+1, train_loss, valid_loss))
 
 
 def save_plots(loss_pp, epoch_losses, output_dir):
