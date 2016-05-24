@@ -181,7 +181,8 @@ def main(_):
         os.makedirs(FLAGS.output_dir)
       save_plots(losses, perps, FLAGS.output_dir)
       save_loss_and_perplexity(losses, perps, FLAGS.output_dir)
-
+      saver = tf.train.Saver()
+      saver.save(sess, FLAGS.output_dir + "/parameters")
 
 if __name__ == "__main__":
   tf.app.run()
