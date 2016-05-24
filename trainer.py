@@ -18,7 +18,7 @@ flags.DEFINE_string('model_type', 'char', 'model type. "char" or "word"')
 flags.DEFINE_string('data_path', None, 'path to data file/folder')
 flags.DEFINE_string('data_type', 'text', 'type of training data.')
 flags.DEFINE_string('output_dir', None, 'folder path to dump output files to.')
-flags.DEFINE_string('sample_during_training', True,
+flags.DEFINE_string('sample_during_training', False,
                     'if True, produce sample phrases after every epoch')
 
 # For optionally overwriting hyperparameter values.
@@ -185,4 +185,3 @@ def main(_):
 
 if __name__ == "__main__":
   tf.app.run()
-
