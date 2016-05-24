@@ -2,7 +2,7 @@ import matplotlib
 matplotlib.use('Agg')  # Avoid requiring X server.
 
 from copy import deepcopy
-import os, sys, time
+import csv, os, sys, time
 import numpy as np
 import tensorflow as tf
 
@@ -17,9 +17,18 @@ flags.DEFINE_string('config', None, 'config name')
 flags.DEFINE_string('model_type', 'char', 'model type. "char" or "word"')
 flags.DEFINE_string('data_path', None, 'path to data file/folder')
 flags.DEFINE_string('data_type', 'text', 'type of training data.')
-flags.DEFINE_string('plot_dir', None, 'folder path to loss/perplexity plot')
+flags.DEFINE_string('output_dir', None, 'folder path to dump output files to.')
 flags.DEFINE_string('sample_during_training', True,
                     'if True, produce sample phrases after every epoch')
+
+# For optionally overwriting hyperparameter values.
+flags.DEFINE_integer('me', None, 'max_epoch')
+flags.DEFINE_integer('bs', None, 'batch_size')
+flags.DEFINE_integer('sl', None, 'seq_length')
+flags.DEFINE_float('lr', None, 'learning_rate')
+flags.DEFINE_integer('hs', None, 'hidden_size')
+flags.DEFINE_float('kp', None, 'keep_prob')
+
 
 FLAGS = flags.FLAGS
 
@@ -32,29 +41,42 @@ def get_config(vocab_size, inference=False):
   elif FLAGS.config == "bn_lstm":
     config = CharacterModelBNLSTMConfig(vocab_size)
 
+  # Override values specified in commandline flags.
+  params = [FLAGS.me, FLAGS.bs, FLAGS.sl, FLAGS.lr, FLAGS.hs, FLAGS.kp]
+  names = ['max_epoch', 'batch_size', 'seq_length', 'learning_rate',
+           'hidden_size', 'keep_prob']
+
+  for i, param in enumerate(params):
+    if param:
+      setattr(config, names[i], param)
+
   if inference:
     config.for_inference()
 
   return config
 
 
-def save_plots(losses, perps, plot_dir):
-  if not os.path.exists(plot_dir):
-    os.makedirs(plot_dir)
+def save_loss_and_perplexity(losses, perps, output_dir):
+  with open(os.path.join(output_dir, 'loss_and_perp.csv'), 'w') as f:
+    writer = csv.writer(f, delimiter=' ', quoting=csv.QUOTE_NONE)
+    for i, (loss, perp) in enumerate(zip(losses, perps)):
+      writer.writerow((i, loss, perp))
 
+
+def save_plots(losses, perps, output_dir):
   x = np.arange(len(losses))
-  plt.plot(x, losses, label='loss')
+  plt.semilogy(x, losses, label='loss')
   plt.xlabel('iteration')
   plt.ylabel('loss')
   plt.legend()
-  plt.savefig(os.path.join(plot_dir, 'loss.pdf'))
+  plt.savefig(os.path.join(output_dir, 'loss.pdf'))
 
   plt.clf()
-  plt.plot(x, perps, label='perplexity')
+  plt.semilogy(x, perps, label='perplexity')
   plt.xlabel('iteration')
   plt.ylabel('perplexity')
   plt.legend()
-  plt.savefig(os.path.join(plot_dir, 'perplexity.pdf'))
+  plt.savefig(os.path.join(output_dir, 'perplexity.pdf'))
 
 
 def main(_):
@@ -154,8 +176,11 @@ def main(_):
     print(' -- Test loss: %.4f, perp: %.2f (took %.2f sec)' %
           (np.mean(test_losses), np.mean(test_perps), elapsed))
 
-    if FLAGS.plot_dir:
-      save_plots(losses, perps, FLAGS.plot_dir)
+    if FLAGS.output_dir:
+      if not os.path.exists(FLAGS.output_dir):
+        os.makedirs(FLAGS.output_dir)
+      save_plots(losses, perps, FLAGS.output_dir)
+      save_loss_and_perplexity(losses, perps, FLAGS.output_dir)
 
 
 if __name__ == "__main__":
