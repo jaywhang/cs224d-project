@@ -9,11 +9,10 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from data_readers import text_reader, ptb_reader
 from char_model import CharacterModel
-from configs import *
+from configs import CharacterModelLSTMConfig, FLAG_TO_NAME_MAP
 
 flags, logging = tf.flags, tf.logging
 
-flags.DEFINE_string('config', None, 'config name')
 flags.DEFINE_string('model_type', 'char', 'model type. "char" or "word"')
 flags.DEFINE_string('data_path', None, 'path to data file/folder')
 flags.DEFINE_string('data_type', 'text', 'type of training data.')
@@ -22,6 +21,7 @@ flags.DEFINE_string('sample_during_training', False,
                     'if True, produce sample phrases after every epoch')
 
 # For optionally overwriting hyperparameter values.
+flags.DEFINE_string('ct', None, 'cell_type')
 flags.DEFINE_integer('me', None, 'max_epoch')
 flags.DEFINE_integer('bs', None, 'batch_size')
 flags.DEFINE_integer('sl', None, 'seq_length')
@@ -34,24 +34,18 @@ FLAGS = flags.FLAGS
 
 
 def get_config(vocab_size, inference=False):
-  if not FLAGS.config or FLAGS.config not in ('lstm', 'bn_lstm'):
-    raise ValueError("Invalid config.")
-  elif FLAGS.config == "lstm":
-    config = CharacterModelLSTMConfig(vocab_size)
-  elif FLAGS.config == "bn_lstm":
-    config = CharacterModelBNLSTMConfig(vocab_size)
+  config = CharacterModelLSTMConfig(vocab_size)
 
   # Override values specified in commandline flags.
-  params = [FLAGS.me, FLAGS.bs, FLAGS.sl, FLAGS.lr, FLAGS.hs, FLAGS.kp]
-  names = ['max_epoch', 'batch_size', 'seq_length', 'learning_rate',
-           'hidden_size', 'keep_prob']
+  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp']
 
-  for i, param in enumerate(params):
-    if param:
-      setattr(config, names[i], param)
+  for param in params:
+    value = getattr(FLAGS, param)
+    if value:
+      setattr(config, FLAG_TO_NAME_MAP[param], value)
 
   if inference:
-    config.for_inference()
+    config.is_training = False
 
   return config
 
@@ -212,12 +206,13 @@ def main(_):
           (np.mean(test_losses), np.mean(test_perps), elapsed))
 
     if FLAGS.output_dir:
-      if not os.path.exists(FLAGS.output_dir):
-        os.makedirs(FLAGS.output_dir)
-      save_plots(train_loss_pp, epoch_losses, FLAGS.output_dir)
-      save_losses(train_loss_pp, epoch_losses, FLAGS.output_dir)
+      outdir = os.path.join(FLAGS.output_dir, train_config.filename())
+      if not os.path.exists(outdir):
+        os.makedirs(outdir)
+      save_plots(train_loss_pp, epoch_losses, outdir)
+      save_losses(train_loss_pp, epoch_losses, outdir)
       saver = tf.train.Saver()
-      saver.save(sess, os.path.join(FLAGS.output_dir, 'parameters'))
+      saver.save(sess, os.path.join(outdir, 'parameters'))
 
 
 if __name__ == "__main__":

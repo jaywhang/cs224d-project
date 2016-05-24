@@ -24,12 +24,12 @@ class CharacterModel(object):
     inputs = tf.gather(embedding, self._input_seq)
 
     # Hidden layers: stacked LSTM cells with Dropout.
-    if config.cell_type == rnn_cell.BasicLSTMCell:
+    if config.cell_type == 'lstm':
       cell = rnn_cell.BasicLSTMCell(config.hidden_size)
-    elif config.cell_type == rnn_cell.BNLSTMCell:
+    elif config.cell_type == 'bnlstm':
       cell = rnn_cell.BNLSTMCell(config.is_training, config.hidden_size)
     else:
-      raise ValueError("Unknown cell_type")
+      raise ValueError('Unknown cell_type: %s' % config.cell_type)
 
     # Apply dropout if we're training.
     if config.is_training and config.keep_prob < 1.0:
@@ -54,13 +54,13 @@ class CharacterModel(object):
     state = self._initial_state
     outputs = []
     for time_step in range(config.seq_length):
-      if config.cell_type == rnn_cell.BasicLSTMCell:
+      if config.cell_type == 'lstm':
         cell_output, state = cell(split_input[time_step], state)
-      elif config.cell_type == rnn_cell.BNLSTMCell:
+      elif config.cell_type == 'bnlstm':
         cell_output, state = cell(split_input[time_step], state,
                                     time_step=time_step)
       else:
-        raise ValueError("Unknown cell_type")
+        raise ValueError('Unknown cell_type' % config.cell_type)
       outputs.append(cell_output)
     self._final_state = state
 
@@ -87,7 +87,12 @@ class CharacterModel(object):
       tvars = tf.trainable_variables()
       grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars),
                                           config.max_grad_norm)
-      optimizer = config.optimizer(config.learning_rate)
+      if config.optimizer == 'adam':
+        optimizer = tf.train.AdamOptimizer(config.learning_rate)
+      elif config.optimizer == 'sgd':
+        optimizer = tf.train.GradientDescentOptimizer(config.learning_rate)
+      else:
+        raise ValueError('Invalid optimizer: %s' % config.optimizer)
       self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
   @property
