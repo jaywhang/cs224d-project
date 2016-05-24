@@ -59,10 +59,14 @@ def run_epoch(sess, config, train_model, data, op,
 def get_config(vocab_size):
   if not FLAGS.config:
     raise ValueError("Must set --config")
-  if FLAGS.config == "lstm":
-    return CharacterModelLSTMConfig(vocab_size)
-  elif FLAGS.config == "bn_lstm":
-    return CharacterModelBNLSTMConfig(vocab_size)
+  if FLAGS.config == "lstm_64":
+    return LSTMConfig64(vocab_size)
+  elif FLAGS.config == "bn_lstm_64":
+    return BNLSTMConfig64(vocab_size)
+  elif FLAGS.config == "lstm_128":
+    return LSTMConfig128(vocab_size)
+  elif FLAGS.config == "bn_lstm_128":
+    return BNLSTMConfig128(vocab_size)
   else:
     raise ValueError("Unknown config")
 

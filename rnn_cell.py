@@ -97,7 +97,7 @@ class BNLSTMCell(BasicLSTMCell):
       tf.get_variable("xgamma", initializer=tf.ones([4*num_units])/10)
       tf.get_variable("hgamma", initializer=tf.ones([4*num_units])/10)
       tf.get_variable("cgamma", initializer=tf.ones([num_units])/10)
-      tf.get_variable("cbeta", shape=[num_units])
+      tf.get_variable("cbeta", initializer=tf.zeros([num_units]))
 
     self.is_training = is_training
 
@@ -107,9 +107,9 @@ class BNLSTMCell(BasicLSTMCell):
     if self.is_training:
       mean, variance = tf.nn.moments(x, axes=[0])
       update_moving_mean = moving_averages.assign_moving_average(
-          xmean, mean, 0.9)
+          xmean, mean, 0.95)
       update_moving_variance = moving_averages.assign_moving_average(
-          xvar, variance, 0.9)
+          xvar, variance, 0.95)
       control_inputs = [update_moving_mean, update_moving_variance]
     else:
       mean = xmean
@@ -133,15 +133,15 @@ class BNLSTMCell(BasicLSTMCell):
       xmean = tf.get_variable("xmean",
           initializer=tf.zeros([4*self._num_units]), trainable=False)
       xvar = tf.get_variable("xvar",
-          initializer=tf.zeros([4*self._num_units]), trainable=False)
+          initializer=tf.ones([4*self._num_units]), trainable=False)
       hmean = tf.get_variable("hmean",
           initializer=tf.zeros([4*self._num_units]), trainable=False)
       hvar = tf.get_variable("hvar",
-          initializer=tf.zeros([4*self._num_units]), trainable=False)
+          initializer=tf.ones([4*self._num_units]), trainable=False)
       cmean = tf.get_variable("cmean",
           initializer=tf.zeros([self._num_units]), trainable=False)
       cvar = tf.get_variable("cvar",
-          initializer=tf.zeros([self._num_units]), trainable=False)
+          initializer=tf.ones([self._num_units]), trainable=False)
 
     c, h = tf.split(1, 2, state)
 

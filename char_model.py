@@ -32,9 +32,8 @@ class CharacterModel(object):
       raise ValueError("Unknown cell_type")
 
     # Apply dropout.
-    if is_training:
-      cell = rnn_cell.DropoutWrapper(cell,
-        input_keep_prob=config.keep_prob, output_keep_prob=config.keep_prob)
+    # if is_training:
+    #   cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=config.keep_prob)
 
     # No implementation of MultiRNNCell in our own rnn_cell.py yet
     # self._multi_cell = multi_cell = (

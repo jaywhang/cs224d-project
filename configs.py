@@ -1,6 +1,6 @@
 import rnn_cell
 
-class CharacterModelLSTMConfig(object):
+class DefaultLSTMConfig(object):
 
   def __init__(self, vocab_size):
     # Default model parameters
@@ -21,8 +21,21 @@ class CharacterModelLSTMConfig(object):
             '\n'.join(['  -> %s: %s' % (k,v)
                        for k,v in self.__dict__.iteritems()]))
 
+class LSTMConfig64(DefaultLSTMConfig):
+  pass
 
-class CharacterModelBNLSTMConfig(CharacterModelLSTMConfig):
+class BNLSTMConfig64(DefaultLSTMConfig):
   def __init__(self, vocab_size):
-    CharacterModelLSTMConfig.__init__(self, vocab_size)
+    DefaultLSTMConfig.__init__(self, vocab_size)
     self.cell_type = rnn_cell.BNLSTMCell
+
+class LSTMConfig128(DefaultLSTMConfig):
+  def __init__(self, vocab_size):
+    DefaultLSTMConfig.__init__(self, vocab_size)
+    self.batch_size = 128
+
+class BNLSTMConfig128(DefaultLSTMConfig):
+  def __init__(self, vocab_size):
+    DefaultLSTMConfig.__init__(self, vocab_size)
+    self.cell_type = rnn_cell.BNLSTMCell
+    self.batch_size = 128
