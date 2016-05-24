@@ -32,7 +32,7 @@ class CharacterModel(object):
       raise ValueError("Unknown cell_type")
 
     # Apply dropout if we're training.
-    if config.is_training:
+    if config.is_training and config.keep_prob < 1.0:
       self._cell = cell = rnn_cell.DropoutWrapper(cell,
         input_keep_prob=config.keep_prob, output_keep_prob=config.keep_prob)
 
@@ -83,11 +83,12 @@ class CharacterModel(object):
     self._perplexity = tf.exp(self._loss)
 
     # Optimizer
-    tvars = tf.trainable_variables()
-    grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars),
-                                        config.max_grad_norm)
-    optimizer = config.optimizer(config.learning_rate)
-    self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+    if self.is_training:  # shouldn't need this if but just in case
+      tvars = tf.trainable_variables()
+      grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars),
+                                          config.max_grad_norm)
+      optimizer = config.optimizer(config.learning_rate)
+      self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
   @property
   def config(self):
@@ -145,7 +146,9 @@ class CharacterModel(object):
       op = tf.no_op()
 
     for inputs, labels, i, num_batches in data_iterator:
-      loss, perp, _, state = sess.run(
+      # don't save the state, exactly seq_length sequences for now.
+      # loss, perp, _, state = sess.run(
+      loss, perp, _, _ = sess.run(
           [self.loss, self.perplexity, op, self.final_state],
           feed_dict={self.input_seq: inputs,
                      self.target_seq: labels,
@@ -197,4 +200,3 @@ class CharacterModel(object):
       result.append(new_idx)
 
     return result
-
