@@ -83,7 +83,7 @@ class CharacterModel(object):
     self._perplexity = tf.exp(self._loss)
 
     # Optimizer
-    if self.is_training:  # shouldn't need this if but just in case
+    if config.is_training:  # shouldn't need this if but just in case
       tvars = tf.trainable_variables()
       grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars),
                                           config.max_grad_norm)
