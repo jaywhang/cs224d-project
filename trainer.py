@@ -50,7 +50,14 @@ def get_config(vocab_size, inference=False):
   return config
 
 
-def save_losses(loss_pp, epoch_losses, output_dir):
+def save_training_info(config, test_loss, test_perp, output_dir):
+  config_string = str(config)
+  with open(os.path.join(output_dir, 'train_summary.txt'), 'w') as f:
+    f.write(config_string + '\n')
+    f.write('Test loss: %.4f, perplexity: %.2f' % (test_loss, test_perp))
+
+
+def save_losses(loss_pp, epoch_losses, epoch_perps, output_dir):
   with open(os.path.join(output_dir, 'iter_loss_pp.csv'), 'w') as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (loss, perp) in enumerate(loss_pp):
@@ -61,14 +68,18 @@ def save_losses(loss_pp, epoch_losses, output_dir):
     for i, (train_loss, valid_loss) in enumerate(epoch_losses):
       writer.writerow((i+1, train_loss, valid_loss))
 
+  with open(os.path.join(output_dir, 'train_valid_perplexity.csv'), 'w') as f:
+    writer = csv.writer(f, quoting=csv.QUOTE_NONE)
+    for i, (train_perp, valid_perp) in enumerate(epoch_perps):
+      writer.writerow((i+1, train_perp, valid_perp))
 
-def save_plots(loss_pp, epoch_losses, output_dir):
-  train_losses, valid_losses = zip(*epoch_losses)
-  num_epochs = len(epoch_losses)
-  x = np.arange(num_epochs)
+
+def save_plots(loss_pp, epoch_losses, epoch_perps, output_dir):
+  x = np.arange(len(epoch_losses))
   plt.grid(True)
 
-  # Train vs valid loss on regular scale.
+  # Train vs valid loss on.
+  train_losses, valid_losses = zip(*epoch_losses)
   plt.plot(x, train_losses, label='Train')
   plt.plot(x, valid_losses, label='Valid')
   plt.xlabel('Epoch')
@@ -78,13 +89,14 @@ def save_plots(loss_pp, epoch_losses, output_dir):
 
   plt.clf()
   plt.grid(True)
-  # Train vs valid loss on logarithmic scale.
-  plt.semilogy(x, train_losses, label='Train')
-  plt.semilogy(x, valid_losses, label='Valid')
+  # Train vs valid perplexity.
+  train_pp, valid_pp = zip(*epoch_perps)
+  plt.plot(x, train_pp, label='Train')
+  plt.plot(x, valid_pp, label='Valid')
   plt.xlabel('Epoch')
-  plt.ylabel('Loss (log scale)')
+  plt.ylabel('Perplexity')
   plt.legend()
-  plt.savefig(os.path.join(output_dir, 'loss_log.pdf'))
+  plt.savefig(os.path.join(output_dir, 'perplexity.pdf'))
 
   plt.clf()
   plt.grid(True)
@@ -148,6 +160,7 @@ def main(_):
     train_loss_pp = []
     # Per-epoch train and valid losses.
     epoch_losses = []
+    epoch_perps = []
 
     print('Starting training.')
     train_start_time = time.time()
@@ -175,6 +188,7 @@ def main(_):
             (np.mean(valid_losses), np.mean(valid_perps), elapsed))
 
       epoch_losses.append((new_losses[-1], np.mean(valid_losses)))
+      epoch_perps.append((new_perps[-1], np.mean(valid_perps)))
 
       if FLAGS.sample_during_training:
         if FLAGS.model_type == 'char':
@@ -209,8 +223,10 @@ def main(_):
       outdir = os.path.join(FLAGS.output_dir, train_config.filename())
       if not os.path.exists(outdir):
         os.makedirs(outdir)
-      save_plots(train_loss_pp, epoch_losses, outdir)
-      save_losses(train_loss_pp, epoch_losses, outdir)
+      save_plots(train_loss_pp, epoch_losses, epoch_perps, outdir)
+      save_losses(train_loss_pp, epoch_losses, epoch_perps, outdir)
+      save_training_info(train_config, np.mean(test_losses),
+                         np.mean(test_perps), outdir)
       saver = tf.train.Saver()
       saver.save(sess, os.path.join(outdir, 'parameters'))
 
