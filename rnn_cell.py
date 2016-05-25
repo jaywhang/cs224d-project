@@ -153,8 +153,8 @@ class BNLSTMCell(BasicLSTMCell):
     i, j, f, o = tf.split(1, 4, concat)
 
     new_c = c * tf.sigmoid(f + self._forget_bias) + tf.sigmoid(i) * tf.tanh(j)
-    new_c = self._batch_norm(new_c, cmean, cvar, cgamma, cbeta)
-    new_h = tf.tanh(new_c) * tf.sigmoid(o)
+    new_c_bn = self._batch_norm(new_c, cmean, cvar, cgamma, cbeta)
+    new_h = tf.tanh(new_c_bn) * tf.sigmoid(o)
 
     return new_h, tf.concat(1, [new_c, new_h])
 
