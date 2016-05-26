@@ -74,8 +74,8 @@ class CharacterModel(object):
     # Average cross-entropy loss within the batch.
     loss_tensor = tf.nn.sparse_softmax_cross_entropy_with_logits(
       self._logits, tf.reshape(self._target_seq, [-1]))
-    self._loss = tf.reduce_mean(loss_tensor)
-    self._perplexity = tf.exp(self._loss)
+    self._loss = tf.reduce_sum(loss_tensor) / config.batch_size
+    self._perplexity = tf.exp(self._loss / config.seq_length)
 
     # Optimizer
     if config.is_training:  # shouldn't need this if but just in case
@@ -170,7 +170,7 @@ class CharacterModel(object):
 
       if verbose and (i % 10 == 0 or i == num_batches-1):
         sys.stdout.write('\r{} / {} : loss = {:.4f}, perp = {:.3f}'.format(
-              i+1, num_batches, loss, np.exp(loss)))
+              i+1, num_batches, loss, perp))
         sys.stdout.flush()
 
     elapsed = time.time() - start_time
