@@ -114,9 +114,9 @@ class BNLSTMCell(BasicLSTMCell):
     if self.is_training:
       mean, variance = tf.nn.moments(x, axes=[0])
       update_moving_mean = moving_averages.assign_moving_average(
-          xmean, mean, 0.9)
+          xmean, mean, 0.95)
       update_moving_variance = moving_averages.assign_moving_average(
-          xvar, variance, 0.9)
+          xvar, variance, 0.95)
       control_inputs = [update_moving_mean, update_moving_variance]
     else:
       mean = xmean
