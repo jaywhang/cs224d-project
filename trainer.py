@@ -17,8 +17,11 @@ flags.DEFINE_string('model_type', 'char', 'model type. "char" or "word"')
 flags.DEFINE_string('data_path', None, 'path to data file/folder')
 flags.DEFINE_string('data_type', 'text', 'type of training data.')
 flags.DEFINE_string('output_dir', None, 'folder path to dump output files to.')
-flags.DEFINE_string('sample_during_training', False,
+flags.DEFINE_bool('sample_during_training', False,
                     'if True, produce sample phrases after every epoch')
+flags.DEFINE_bool('restart_training', False,
+                    'if True, restart training from saved parameters')
+flags.DEFINE_integer('start_epoch', 1, 'epoch to start training at')
 
 # For optionally overwriting hyperparameter values.
 flags.DEFINE_string('ct', None, 'cell_type')
@@ -58,23 +61,25 @@ def save_training_info(config, test_loss, test_perp, output_dir):
 
 
 def save_losses(loss_pp, epoch_losses, epoch_perps, output_dir):
-  with open(os.path.join(output_dir, 'iter_loss_pp.csv'), 'w') as f:
+  mode = 'a' if FLAGS.restart_training else 'w'
+  with open(os.path.join(output_dir, 'iter_loss_pp.csv'), mode) as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (loss, perp) in enumerate(loss_pp):
-      writer.writerow((i+1, loss, perp))
+      writer.writerow((i+FLAGS.start_epoch, loss, perp))
 
-  with open(os.path.join(output_dir, 'train_valid_loss.csv'), 'w') as f:
+  with open(os.path.join(output_dir, 'train_valid_loss.csv'), mode) as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (train_loss, valid_loss) in enumerate(epoch_losses):
-      writer.writerow((i+1, train_loss, valid_loss))
+      writer.writerow((i+FLAGS.start_epoch, train_loss, valid_loss))
 
-  with open(os.path.join(output_dir, 'train_valid_perplexity.csv'), 'w') as f:
+  with open(os.path.join(output_dir, 'train_valid_perplexity.csv'), mode) as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (train_perp, valid_perp) in enumerate(epoch_perps):
-      writer.writerow((i+1, train_perp, valid_perp))
+      writer.writerow((i+FLAGS.start_epoch, train_perp, valid_perp))
 
 
 def save_plots(loss_pp, epoch_losses, epoch_perps, output_dir):
+  if FLAGS.restart_training: return
   x = np.arange(len(epoch_losses))
   plt.grid(True)
 
@@ -146,6 +151,12 @@ def main(_):
 
   print (train_config)
 
+  if (FLAGS.start_epoch != 1 and not FLAGS.restart_training):
+    raise ValueError("Can't set start_epoch if you don't set restart_training")
+  if (FLAGS.start_epoch > train_config.max_epoch):
+    raise ValueError("start_epoch is greater than max_epoch")
+
+
   with tf.Graph().as_default(), tf.Session() as sess:
     initializer = None
     with tf.variable_scope('model', reuse=None):
@@ -156,6 +167,16 @@ def main(_):
         sample_model = CharacterModel(sample_config)
 
     tf.initialize_all_variables().run()
+
+    saver = tf.train.Saver()
+    if FLAGS.restart_training:
+      if FLAGS.output_dir:
+        outdir = os.path.join(FLAGS.output_dir, train_config.filename())
+        saver.restore(sess, outdir + "/parameters")
+        print("Loaded weights!")
+      else:
+        raise ValueError("Set restart_training flag but not output_dir flag")
+
     # Losses and perplexities from all iterations from train data.
     train_loss_pp = []
     # Per-epoch train and valid losses.
@@ -165,7 +186,7 @@ def main(_):
     print('Starting training.')
     train_start_time = time.time()
 
-    for i in xrange(1, train_config.max_epoch+1):
+    for i in xrange(FLAGS.start_epoch, train_config.max_epoch+1):
       # Get new iterators.
       train_iterator = train_reader.iterator(train_config.batch_size,
                                              train_config.seq_length)
@@ -227,7 +248,6 @@ def main(_):
       save_losses(train_loss_pp, epoch_losses, epoch_perps, outdir)
       save_training_info(train_config, np.mean(test_losses),
                          np.mean(test_perps), outdir)
-      saver = tf.train.Saver()
       saver.save(sess, os.path.join(outdir, 'parameters'))
 
 

@@ -46,5 +46,5 @@ class CharacterModelLSTMConfig(object):
                                      key=lambda x: x[0]))
 
     pairs = [flag + '_' + str(getattr(self, name))
-             for flag, name in ordered_map.iteritems()]
+             for flag, name in ordered_map.iteritems() if flag != 'me']
     return '_'.join(pairs)
