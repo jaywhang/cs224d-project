@@ -25,7 +25,7 @@ class CharacterModel(object):
 
     # Hidden layers: stacked LSTM cells with Dropout.
     if config.cell_type == 'lstm':
-      cell = rnn_cell.BasicLSTMCell(config.hidden_size)
+      cell = rnn_cell.BasicLSTMCell(config.is_training, config.hidden_size)
     elif config.cell_type == 'bnlstm':
       cell = rnn_cell.BNLSTMCell(config.is_training, config.hidden_size)
     else:
@@ -44,7 +44,8 @@ class CharacterModel(object):
 
     # Placeholder for initial hidden state.
     self._initial_state = tf.placeholder(tf.float32,
-                                        [None, cell.state_size])
+                                        [None, cell.state_size],
+                                        name="initial_state")
 
     # Split inputs into individual timesteps for BPTT.
     split_input = [tf.squeeze(_input, squeeze_dims=[1])
@@ -54,13 +55,7 @@ class CharacterModel(object):
     state = self._initial_state
     outputs = []
     for time_step in range(config.seq_length):
-      if config.cell_type == 'lstm':
-        cell_output, state = cell(split_input[time_step], state)
-      elif config.cell_type == 'bnlstm':
-        cell_output, state = cell(split_input[time_step], state,
-                                    time_step=time_step)
-      else:
-        raise ValueError('Unknown cell_type' % config.cell_type)
+      cell_output, state = cell(split_input[time_step], state, time_step)
       outputs.append(cell_output)
     self._final_state = state
 
@@ -94,6 +89,10 @@ class CharacterModel(object):
       else:
         raise ValueError('Invalid optimizer: %s' % config.optimizer)
       self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+
+      # hold merged variables in the training set
+    if not config.is_training:  # shouldn't need this if but just in case
+      self.merged_summaries = tf.merge_all_summaries()
 
   @property
   def config(self):
@@ -139,27 +138,35 @@ class CharacterModel(object):
   def zero_state(self):
     return self._cell.zero_state(self._config.batch_size, tf.float32)
 
-  def run_epoch(self, sess, data_iterator, verbose=True):
+  def run_epoch(self, sess, data_iterator, summary_writer=None, step=None, verbose=True):
     """Runs one epoch of training."""
     start_time = time.time()
     losses, perplexities = [], []
     state, = sess.run([self.zero_state])
 
     if self._config.is_training:
-      op = self.train_op
+      train_op = self.train_op
     else:
-      op = tf.no_op()
+      train_op = tf.no_op()
+
+    if summary_writer:
+      summary_op = self.merged_summaries
+    else:
+      summary_op = tf.no_op()
 
     for inputs, labels, i, num_batches in data_iterator:
       # don't save the state, exactly seq_length sequences for now.
       # loss, perp, _, state = sess.run(
-      loss, perp, _, _ = sess.run(
-          [self.loss, self.perplexity, op, self.final_state],
+      loss, perp, _, _, summary = sess.run(
+          [self.loss, self.perplexity, train_op, self.final_state, summary_op],
           feed_dict={self.input_seq: inputs,
                      self.target_seq: labels,
                      self.initial_state: state})
       losses.append(loss)
       perplexities.append(perp)
+
+      if summary_writer:
+        summary_writer.add_summary(summary, step)
 
       if verbose and (i % 10 == 0 or i == num_batches-1):
         sys.stdout.write('\r{} / {} : loss = {:.4f}, perp = {:.3f}'.format(
