@@ -165,7 +165,7 @@ class CharacterModel(object):
       losses.append(loss)
       perplexities.append(perp)
 
-      if summary_writer:
+      if i == 0 and summary_writer:
         summary_writer.add_summary(summary, step)
 
       if verbose and (i % 10 == 0 or i == num_batches-1):
