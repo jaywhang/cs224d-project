@@ -166,7 +166,6 @@ def main(_):
 
   print (train_config)
 
-
   with tf.Graph().as_default(), tf.Session() as sess:
     initializer = None
     with tf.variable_scope('model', reuse=None):
@@ -189,6 +188,10 @@ def main(_):
       outdir = os.path.join(FLAGS.output_dir, train_config.filename())
       if not os.path.exists(outdir):
         os.makedirs(outdir)
+
+    test_writer = tf.train.SummaryWriter(
+        os.path.join('tensorboard', train_config.filename(), 'test'),
+        sess.graph)
 
     if FLAGS.restart_training:
       if not FLAGS.output_dir:
@@ -222,7 +225,8 @@ def main(_):
       # Calculate validation loss.
       start_time = time.time()
       valid_losses, valid_perps, _ = eval_model.run_epoch(
-          sess, valid_iterator, verbose=False)
+          sess, valid_iterator, verbose=False,
+          summary_writer=test_writer, step=i)
       elapsed = time.time() - start_time
       print(' -- Valid loss: %.4f, perp: %.2f (took %.2f sec)' %
             (np.mean(valid_losses), np.mean(valid_perps), elapsed))

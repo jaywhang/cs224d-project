@@ -1,4 +1,12 @@
 import numpy as np
+import tensorflow as tf
+
+def variable_summaries(var, name=""):
+  if not name:
+    name = var.name
+  tf.scalar_summary('max/' + name, tf.reduce_max(var))
+  tf.scalar_summary('min/' + name, tf.reduce_min(var))
+  tf.histogram_summary(name, var)
 
 def orthogonal_initializer(shape, dtype):
   # taken from https://github.com/cooijmanstim/recurrent-batch-normalization/blob/master/penntreebank.py

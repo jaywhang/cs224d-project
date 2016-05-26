@@ -50,10 +50,11 @@ class RNNCell(object):
 
 
 class BasicLSTMCell(RNNCell):
-  def __init__(self, num_units, forget_bias=1.0, input_size=None):
+  def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
     self._num_units = num_units
     self._input_size = num_units if input_size is None else input_size
     self._forget_bias = forget_bias
+    self.is_training = is_training
 
     # h' = hH + xW + b
     with tf.variable_scope("BasicLSTMCell"):
@@ -63,7 +64,7 @@ class BasicLSTMCell(RNNCell):
           initializer=orthogonal_initializer)
       tf.get_variable("b", [4*self._num_units])
 
-  def __call__(self, inputs, state):
+  def __call__(self, inputs, state, time_step):
     with tf.variable_scope("BasicLSTMCell", reuse=True):
       H = tf.get_variable("H")
       W = tf.get_variable("W")
@@ -75,6 +76,14 @@ class BasicLSTMCell(RNNCell):
 
     new_c = c * tf.sigmoid(f + self._forget_bias) + tf.sigmoid(i) * tf.tanh(j)
     new_h = tf.tanh(new_c) * tf.sigmoid(o)
+
+    if not self.is_training and time_step in [0, 49, 99]:
+      variable_summaries(new_c, "new_c/%s" % time_step)
+      variable_summaries(new_h, "new_h/%s" % time_step)
+      variable_summaries(i, "i/%s" % time_step)
+      variable_summaries(j, "j/%s" % time_step)
+      variable_summaries(f, "f/%s" % time_step)
+      variable_summaries(o, "o/%s" % time_step)
 
     return new_h, tf.concat(1, [new_c, new_h])
 
@@ -92,14 +101,12 @@ class BasicLSTMCell(RNNCell):
 
 class BNLSTMCell(BasicLSTMCell):
   def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
-    super(BNLSTMCell, self).__init__(num_units, forget_bias, input_size)
+    super(BNLSTMCell, self).__init__(is_training, num_units, forget_bias, input_size)
     with tf.variable_scope("BatchNorm"):
       tf.get_variable("xgamma", initializer=tf.ones([4*num_units])/10)
       tf.get_variable("hgamma", initializer=tf.ones([4*num_units])/10)
       tf.get_variable("cgamma", initializer=tf.ones([num_units])/10)
       tf.get_variable("cbeta", initializer=tf.zeros([num_units]))
-
-    self.is_training = is_training
 
   def _batch_norm(self, x, xmean, xvar, gamma=None, beta=None,
                   variance_epsilon=1e-5):
@@ -107,9 +114,9 @@ class BNLSTMCell(BasicLSTMCell):
     if self.is_training:
       mean, variance = tf.nn.moments(x, axes=[0])
       update_moving_mean = moving_averages.assign_moving_average(
-          xmean, mean, 0.9)
+          xmean, mean, 0.95)
       update_moving_variance = moving_averages.assign_moving_average(
-          xvar, variance, 0.9)
+          xvar, variance, 0.95)
       control_inputs = [update_moving_mean, update_moving_variance]
     else:
       mean = xmean
@@ -117,6 +124,7 @@ class BNLSTMCell(BasicLSTMCell):
     with tf.control_dependencies(control_inputs):
       return tf.nn.batch_normalization(x, mean, variance,
                 scale=gamma, offset=beta, variance_epsilon=variance_epsilon)
+
   def __call__(self, inputs, state, time_step):
     with tf.variable_scope("BasicLSTMCell", reuse=True):
       H = tf.get_variable("H")
@@ -156,6 +164,24 @@ class BNLSTMCell(BasicLSTMCell):
     new_c_bn = self._batch_norm(new_c, cmean, cvar, cgamma, cbeta)
     new_h = tf.tanh(new_c_bn) * tf.sigmoid(o)
 
+    if not self.is_training and time_step in [0, 49, 99]:
+      variable_summaries(new_c, "new_c/%s" % time_step)
+      variable_summaries(new_h, "new_h/%s" % time_step)
+      variable_summaries(i, "i/%s" % time_step)
+      variable_summaries(j, "j/%s" % time_step)
+      variable_summaries(f, "f/%s" % time_step)
+      variable_summaries(o, "o/%s" % time_step)
+      variable_summaries(xmean, "xmean/%s" % time_step)
+      variable_summaries(hmean, "hmean/%s" % time_step)
+      variable_summaries(cmean, "cmean/%s" % time_step)
+      variable_summaries(xvar, "xvar/%s" % time_step)
+      variable_summaries(hvar, "hvar/%s" % time_step)
+      variable_summaries(cvar, "cvar/%s" % time_step)
+      variable_summaries(xgamma, "xgamma/%s" % time_step)
+      variable_summaries(hgamma, "hgamma/%s" % time_step)
+      variable_summaries(cgamma, "cgamma/%s" % time_step)
+      variable_summaries(cbeta, "cbeta/%s" % time_step)
+
     return new_h, tf.concat(1, [new_c, new_h])
 
 class DropoutWrapper(RNNCell):
@@ -167,11 +193,11 @@ class DropoutWrapper(RNNCell):
     self._output_keep_prob = output_keep_prob
     self._seed = seed
 
-  def __call__(self, inputs, state, **kwargs):
+  def __call__(self, inputs, state, time_step, **kwargs):
     """Run the cell with the declared dropouts."""
     if (self._input_keep_prob < 1):
       inputs = tf.nn.dropout(inputs, self._input_keep_prob, seed=self._seed)
-    output, new_state = self._cell(inputs, state, **kwargs)
+    output, new_state = self._cell(inputs, state, time_step, **kwargs)
     if (self._output_keep_prob < 1):
       output = tf.nn.dropout(output, self._output_keep_prob, seed=self._seed)
     return output, new_state
