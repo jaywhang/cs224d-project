@@ -21,7 +21,6 @@ flags.DEFINE_bool('sample_during_training', False,
                     'if True, produce sample phrases after every epoch')
 flags.DEFINE_bool('restart_training', False,
                     'if True, restart training from saved parameters')
-flags.DEFINE_integer('start_epoch', 1, 'epoch to start training at')
 
 # For optionally overwriting hyperparameter values.
 flags.DEFINE_string('ct', None, 'cell_type')
@@ -59,23 +58,40 @@ def save_training_info(config, test_loss, test_perp, output_dir):
     f.write(config_string + '\n')
     f.write('Test loss: %.4f, perplexity: %.2f' % (test_loss, test_perp))
 
+def read_training_info(output_dir):
+  loss_pp, epoch_losses, epoch_perps = [], [], []
+  with open(os.path.join(output_dir, 'iter_loss_pp.csv'), 'r') as f:
+    reader = csv.reader(f, quoting=csv.QUOTE_NONE)
+    for row in reader:
+      loss_pp.append((row[1], row[2]))
+
+  with open(os.path.join(output_dir, 'train_valid_loss.csv'), 'r') as f:
+    reader = csv.reader(f, quoting=csv.QUOTE_NONE)
+    for row in reader:
+      epoch_losses.append((row[1], row[2]))
+
+  with open(os.path.join(output_dir, 'train_valid_perplexity.csv'), 'r') as f:
+    reader = csv.reader(f, quoting=csv.QUOTE_NONE)
+    for row in reader:
+      epoch_perps.append((row[1], row[2]))
+
+  return loss_pp, epoch_losses, epoch_perps
 
 def save_losses(loss_pp, epoch_losses, epoch_perps, output_dir):
-  mode = 'a' if FLAGS.restart_training else 'w'
-  with open(os.path.join(output_dir, 'iter_loss_pp.csv'), mode) as f:
+  with open(os.path.join(output_dir, 'iter_loss_pp.csv'), 'w') as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (loss, perp) in enumerate(loss_pp):
-      writer.writerow((i+FLAGS.start_epoch, loss, perp))
+      writer.writerow((i+1, loss, perp))
 
-  with open(os.path.join(output_dir, 'train_valid_loss.csv'), mode) as f:
+  with open(os.path.join(output_dir, 'train_valid_loss.csv'), 'w') as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (train_loss, valid_loss) in enumerate(epoch_losses):
-      writer.writerow((i+FLAGS.start_epoch, train_loss, valid_loss))
+      writer.writerow((i+1, train_loss, valid_loss))
 
-  with open(os.path.join(output_dir, 'train_valid_perplexity.csv'), mode) as f:
+  with open(os.path.join(output_dir, 'train_valid_perplexity.csv'), 'w') as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
     for i, (train_perp, valid_perp) in enumerate(epoch_perps):
-      writer.writerow((i+FLAGS.start_epoch, train_perp, valid_perp))
+      writer.writerow((i+1, train_perp, valid_perp))
 
 
 def save_plots(loss_pp, epoch_losses, epoch_perps, output_dir):
@@ -122,7 +138,6 @@ def save_plots(loss_pp, epoch_losses, epoch_perps, output_dir):
   plt.ylabel('Train Perplexity')
   plt.savefig(os.path.join(output_dir, 'train_perplexity.pdf'))
 
-
 def main(_):
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to data file or directory")
@@ -151,11 +166,6 @@ def main(_):
 
   print (train_config)
 
-  if (FLAGS.start_epoch != 1 and not FLAGS.restart_training):
-    raise ValueError("Can't set start_epoch if you don't set restart_training")
-  if (FLAGS.start_epoch > train_config.max_epoch):
-    raise ValueError("start_epoch is greater than max_epoch")
-
 
   with tf.Graph().as_default(), tf.Session() as sess:
     initializer = None
@@ -166,27 +176,36 @@ def main(_):
       if FLAGS.sample_during_training:
         sample_model = CharacterModel(sample_config)
 
-    tf.initialize_all_variables().run()
-
     saver = tf.train.Saver()
-    if FLAGS.restart_training:
-      if FLAGS.output_dir:
-        outdir = os.path.join(FLAGS.output_dir, train_config.filename())
-        saver.restore(sess, outdir + "/parameters")
-        print("Loaded weights!")
-      else:
-        raise ValueError("Set restart_training flag but not output_dir flag")
 
+    tf.initialize_all_variables().run()
     # Losses and perplexities from all iterations from train data.
     train_loss_pp = []
     # Per-epoch train and valid losses.
     epoch_losses = []
     epoch_perps = []
 
+    if FLAGS.output_dir:
+      outdir = os.path.join(FLAGS.output_dir, train_config.filename())
+      if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
+    if FLAGS.restart_training:
+      if not FLAGS.output_dir:
+        raise ValueError("Set restart_training flag but not output_dir flag")
+      train_loss_pp, epoch_losses, epoch_perps = read_training_info(outdir)
+      saver.restore(sess, outdir + "/parameters")
+      print("Loaded %s epochs and last weights!" % len(epoch_losses))
+
+    if (len(epoch_losses) >= train_config.max_epoch):
+      print("Already exceeded max epochs of training: %s, %s" %
+              (len(epoch_losses, train_config.max_epoch)))
+      return
+
     print('Starting training.')
     train_start_time = time.time()
 
-    for i in xrange(FLAGS.start_epoch, train_config.max_epoch+1):
+    for i in xrange(len(epoch_losses)+1, train_config.max_epoch+1):
       # Get new iterators.
       train_iterator = train_reader.iterator(train_config.batch_size,
                                              train_config.seq_length)
@@ -210,6 +229,15 @@ def main(_):
 
       epoch_losses.append((new_losses[-1], np.mean(valid_losses)))
       epoch_perps.append((new_perps[-1], np.mean(valid_perps)))
+
+      if FLAGS.output_dir:
+        save_plots(train_loss_pp, epoch_losses, epoch_perps, outdir)
+        save_losses(train_loss_pp, epoch_losses, epoch_perps, outdir)
+        if i % 5 == 0:
+          saver.save(sess, os.path.join(outdir, 'parameters'))
+          print("Checkpointed parameters")
+
+      print("")
 
       if FLAGS.sample_during_training:
         if FLAGS.model_type == 'char':
@@ -241,9 +269,6 @@ def main(_):
           (np.mean(test_losses), np.mean(test_perps), elapsed))
 
     if FLAGS.output_dir:
-      outdir = os.path.join(FLAGS.output_dir, train_config.filename())
-      if not os.path.exists(outdir):
-        os.makedirs(outdir)
       save_plots(train_loss_pp, epoch_losses, epoch_perps, outdir)
       save_losses(train_loss_pp, epoch_losses, epoch_perps, outdir)
       save_training_info(train_config, np.mean(test_losses),
