@@ -99,7 +99,20 @@ class PTBReader(BaseReader):
         idx = indices[j, i]
         xsamples.append(data[j, idx*seq_length:(idx+1)*seq_length])
         ysamples.append(data[j, idx*seq_length+1:(idx+1)*seq_length+1])
-      yield np.vstack(xsamples), np.vstack(ysamples), i, epoch_size
+      yield np.vstack(xsamples), np.vstack(ysamples), i+1, epoch_size
+
+  def endless_iterator(self, batch_size, seq_length, shuffle=True):
+    cur_epoch = 1
+    total_iter = 1
+
+    while True:
+      # Go through one epoch.
+      for x, y, _, epoch_size in self.iterator(batch_size, seq_length,
+                                               shuffle=shuffle):
+        yield x, y, total_iter, epoch_size, cur_epoch
+        total_iter += 1
+
+      cur_epoch += 1
 
   def encode(self, word_list):
     return [self._word_to_id[word] for word in word_list]
