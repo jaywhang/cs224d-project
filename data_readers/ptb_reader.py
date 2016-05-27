@@ -74,7 +74,7 @@ class PTBReader(BaseReader):
   def vocab_size(self):
     return len(self._word_to_id)
 
-  def iterator(self, batch_size, seq_length):
+  def iterator(self, batch_size, seq_length, shuffle=True):
     raw_data = np.array(self._raw_data, dtype=np.int32)
     data_len = len(raw_data)
     batch_len = data_len // batch_size
@@ -87,10 +87,19 @@ class PTBReader(BaseReader):
     if epoch_size == 0:
       raise ValueError("epoch_size == 0, decrease batch_size or seq_length")
 
+    indices = np.array([list(xrange(epoch_size))] * batch_size)
+    assert indices.shape == (batch_size, epoch_size)
+    if shuffle:
+      for i in range(batch_size):
+        np.random.shuffle(indices[i])
+
     for i in range(epoch_size):
-      x = data[:, i*seq_length:(i+1)*seq_length]
-      y = data[:, i*seq_length+1:(i+1)*seq_length+1]
-      yield x, y, i, epoch_size
+      xsamples, ysamples = [], []
+      for j in range(batch_size):
+        idx = indices[j, i]
+        xsamples.append(data[j, idx*seq_length:(idx+1)*seq_length])
+        ysamples.append(data[j, idx*seq_length+1:(idx+1)*seq_length+1])
+      yield np.vstack(xsamples), np.vstack(ysamples), i, epoch_size
 
   def encode(self, word_list):
     return [self._word_to_id[word] for word in word_list]
