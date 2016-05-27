@@ -23,6 +23,7 @@
 ## `trainer_refactor` branch
 The `ef` parameter specifies every how many iterations we eval valid loss.
 This branch doesn't support restarting and TensorBoard stuff for now.
+
     python2 -O trainer.py \
         --data_type=ptb --data_path=ptb --model_type='char' --output_dir=dir \
         --me=2 --bs=256 --sl=10 --hs=100 --kp=1.0 --ct=lstm --ef=100
