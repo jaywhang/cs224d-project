@@ -30,6 +30,7 @@ flags.DEFINE_integer('sl', None, 'seq_length')
 flags.DEFINE_float('lr', None, 'learning_rate')
 flags.DEFINE_integer('hs', None, 'hidden_size')
 flags.DEFINE_float('kp', None, 'keep_prob')
+flags.DEFINE_float('mgn', None, 'max_grad_norm')
 
 
 FLAGS = flags.FLAGS
@@ -39,7 +40,7 @@ def get_config(vocab_size, inference=False):
   config = CharacterModelLSTMConfig(vocab_size)
 
   # Override values specified in commandline flags.
-  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp']
+  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp', 'mgn']
 
   for param in params:
     value = getattr(FLAGS, param)

@@ -58,11 +58,14 @@ class BasicLSTMCell(RNNCell):
 
     # h' = hH + xW + b
     with tf.variable_scope("BasicLSTMCell"):
-      tf.get_variable("H", [self._num_units, 4*self._num_units],
+      H = tf.get_variable("H", [self._num_units, 4*self._num_units],
           initializer=orthogonal_initializer)
-      tf.get_variable("W", [self._input_size, 4*self._num_units],
+      W = tf.get_variable("W", [self._input_size, 4*self._num_units],
           initializer=orthogonal_initializer)
-      tf.get_variable("b", [4*self._num_units])
+      b = tf.get_variable("b", [4*self._num_units])
+      if not self.is_training:
+        tf.scalar_summary('W_norm', tf.global_norm([W]))
+        tf.scalar_summary('H_norm', tf.global_norm([H]))
 
   def __call__(self, inputs, state, time_step):
     with tf.variable_scope("BasicLSTMCell", reuse=True):
