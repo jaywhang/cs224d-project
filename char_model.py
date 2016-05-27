@@ -147,7 +147,7 @@ class CharacterModel(object):
     if initial_state:
       state = initial_state
     else:
-      state, = sess.run([self.zero_state])
+      state = np.zeros([self._config.batch_size, self._cell.state_size])
 
     loss, perp, _, = sess.run([self.loss, self.perplexity, self.train_op],
                               feed_dict={self.input_seq: inputs,
