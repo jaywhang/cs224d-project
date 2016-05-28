@@ -48,7 +48,6 @@ class RNNCell(object):
     zeros.set_shape([None, self.state_size])
     return zeros
 
-
 class BasicLSTMCell(RNNCell):
   def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
     self._num_units = num_units
@@ -186,6 +185,55 @@ class BNLSTMCell(BasicLSTMCell):
       variable_summaries(cbeta, "cbeta/%s" % time_step)
 
     return new_h, tf.concat(1, [new_c, new_h])
+
+class GRUCell(RNNCell):
+  """Gated Recurrent Unit cell implementation, mostly copied from TensorFlow."""
+
+  def __init__(self, num_units, input_size):
+    self._num_units = num_units
+    self._input_size = input_size
+
+    # r = sigmoid(x*Wr + h_old*Hr)
+    # u = sigmoid(x*Wu + h_old*Hu)
+    with vs.variable_scope("GRUCell"):
+      # Update gate weights
+      Wu = tf.get_variable("Wu", [self._input_size, self._num_units])
+      Hu = tf.get_variable("Hu", [self._num_units, self._num_units])
+      # Reset gate weights
+      Wr = tf.get_variable("Wr", [self._input_size, self._num_units])
+      Hr = tf.get_variable("Hr", [self._num_units, self._num_units])
+      # Memory weights
+      W = tf.get_variable("W", [self._input_size, self._num_units])
+      H = tf.get_variable("H", [self._num_units, self._num_units])
+
+  @property
+  def state_size(self):
+    return self._num_units
+
+  @property
+  def input_size(self):
+    return self._input_size
+
+  @property
+  def output_size(self):
+    return self._num_units
+
+  def __call__(self, inputs, state):
+    """Gated recurrent unit (GRU) with nunits cells."""
+    with vs.variable_scope("GRUCell", reuse=True):
+      Wu = tf.get_variable("Wu")
+      Hu = tf.get_variable("Hu")
+      Wr = tf.get_variable("Wr")
+      Hr = tf.get_variable("Hr")
+      W = tf.get_variable("W")
+      H = tf.get_variable("H")
+
+    r = tf.sigmoid(tf.matmul(inputs, Wr) + tf.matmul(state, Hr))
+    u = tf.sigmoid(tf.matmul(inputs, Wu) + tf.matmul(state, Hu))
+    h_tilde = tf.tanh(tf.matmul(inputs, W) + r * tf.matmul(inputs, H))
+    new_h = u * state + (1 - u) * h_tilde
+
+    return new_h, new_h
 
 class DropoutWrapper(RNNCell):
   """Operator adding dropout to inputs and outputs of the given cell."""
