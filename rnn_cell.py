@@ -51,7 +51,7 @@ class RNNCell(object):
 class BasicLSTMCell(RNNCell):
   def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
     self._num_units = num_units
-    self._input_size = num_units if input_size is None else input_size
+    self._input_size = input_size or num_units
     self._forget_bias = forget_bias
     self.is_training = is_training
 
@@ -189,9 +189,9 @@ class BNLSTMCell(BasicLSTMCell):
 class GRUCell(RNNCell):
   """Gated Recurrent Unit cell implementation, mostly copied from TensorFlow."""
 
-  def __init__(self, num_units, input_size):
+  def __init__(self, num_units, input_size=None):
     self._num_units = num_units
-    self._input_size = input_size
+    self._input_size = input_size or num_units
 
     # r = sigmoid(x*Wr + h_old*Hr)
     # u = sigmoid(x*Wu + h_old*Hu)
