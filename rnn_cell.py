@@ -53,7 +53,7 @@ class BasicLSTMCell(RNNCell):
     self._num_units = num_units
     self._input_size = input_size or num_units
     self._forget_bias = forget_bias
-    self.is_training = is_training
+    self._is_training = is_training
 
     # h' = hH + xW + b
     with tf.variable_scope("BasicLSTMCell"):
@@ -113,7 +113,7 @@ class BNLSTMCell(BasicLSTMCell):
   def _batch_norm(self, x, xmean, xvar, gamma=None, beta=None,
                   variance_epsilon=1e-5):
     control_inputs = []
-    if self.is_training:
+    if self._is_training:
       mean, variance = tf.nn.moments(x, axes=[0])
       update_moving_mean = moving_averages.assign_moving_average(
           xmean, mean, 0.95)
@@ -189,22 +189,23 @@ class BNLSTMCell(BasicLSTMCell):
 class GRUCell(RNNCell):
   """Gated Recurrent Unit cell implementation, mostly copied from TensorFlow."""
 
-  def __init__(self, num_units, input_size=None):
+  def __init__(self, is_training, num_units, input_size=None, bias=1.0):
     self._num_units = num_units
     self._input_size = input_size or num_units
+    self._is_training = is_training
+    self._bias = bias
 
-    # r = sigmoid(x*Wr + h_old*Hr)
-    # u = sigmoid(x*Wu + h_old*Hu)
+    # [r, u] = sigmoid(x*W + h*H + B)
+    # h_tilde = x*Wh + (r * h) * Hh
+    # h_new = u * h_old + (1-u) * h_tilde
     with tf.variable_scope("GRUCell"):
-      # Update gate weights
-      Wu = tf.get_variable("Wu", [self._input_size, self._num_units])
-      Hu = tf.get_variable("Hu", [self._num_units, self._num_units])
-      # Reset gate weights
-      Wr = tf.get_variable("Wr", [self._input_size, self._num_units])
-      Hr = tf.get_variable("Hr", [self._num_units, self._num_units])
+      # Gate weights
+      W = tf.get_variable("W", [self._input_size, 2*self._num_units])
+      H = tf.get_variable("H", [self._num_units, 2*self._num_units])
+      B = tf.get_variable("B", [2*self._num_units])
       # Memory weights
-      W = tf.get_variable("W", [self._input_size, self._num_units])
-      H = tf.get_variable("H", [self._num_units, self._num_units])
+      Wh = tf.get_variable("Wh", [self._input_size, self._num_units])
+      Hh = tf.get_variable("Hh", [self._num_units, self._num_units])
 
   @property
   def state_size(self):
@@ -221,16 +222,15 @@ class GRUCell(RNNCell):
   def __call__(self, inputs, state, time_step):
     """Gated recurrent unit (GRU) with nunits cells."""
     with tf.variable_scope("GRUCell", reuse=True):
-      Wu = tf.get_variable("Wu")
-      Hu = tf.get_variable("Hu")
-      Wr = tf.get_variable("Wr")
-      Hr = tf.get_variable("Hr")
       W = tf.get_variable("W")
       H = tf.get_variable("H")
+      B = tf.get_variable("B")
+      Wh = tf.get_variable("Wh")
+      Hh = tf.get_variable("Hh")
 
-    r = tf.sigmoid(tf.matmul(inputs, Wr) + tf.matmul(state, Hr))
-    u = tf.sigmoid(tf.matmul(inputs, Wu) + tf.matmul(state, Hu))
-    h_tilde = tf.tanh(tf.matmul(inputs, W) + r * tf.matmul(state, H))
+    concat = tf.matmul(inputs, W) + tf.matmul(state, H) + B + self._bias
+    r, u = tf.split(1, 2, tf.sigmoid(concat))
+    h_tilde = tf.tanh(tf.matmul(inputs, Wh) + r * tf.matmul(state, Hh))
     new_h = u * state + (1 - u) * h_tilde
 
     return new_h, new_h
