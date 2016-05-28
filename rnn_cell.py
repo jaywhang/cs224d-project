@@ -27,6 +27,25 @@ from tensorflow.python.training import moving_averages
 
 from util import *
 
+
+def _batch_norm(is_training, x, moving_mean, moving_var, gamma=None, beta=None,
+                variance_epsilon=1e-5):
+  control_inputs = []
+  if is_training:
+    mean, variance = tf.nn.moments(x, axes=[0])
+    update_moving_mean = moving_averages.assign_moving_average(
+        moving_mean, mean, 0.95)
+    update_moving_variance = moving_averages.assign_moving_average(
+        moving_var, variance, 0.95)
+    control_inputs = [update_moving_mean, update_moving_variance]
+  else:
+    mean = moving_mean
+    variance = moving_var
+  with tf.control_dependencies(control_inputs):
+    return tf.nn.batch_normalization(x, mean, variance,
+              scale=gamma, offset=beta, variance_epsilon=variance_epsilon)
+
+
 class RNNCell(object):
   """Abstract class for an RNN cell"""
   def __call__(self, inputs, state):
@@ -48,7 +67,9 @@ class RNNCell(object):
     zeros.set_shape([None, self.state_size])
     return zeros
 
+
 class BasicLSTMCell(RNNCell):
+
   def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
     self._num_units = num_units
     self._input_size = input_size or num_units
@@ -101,31 +122,17 @@ class BasicLSTMCell(RNNCell):
   def state_size(self):
     return 2 * self._num_units
 
+
 class BNLSTMCell(BasicLSTMCell):
+
   def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
-    super(BNLSTMCell, self).__init__(is_training, num_units, forget_bias, input_size)
-    with tf.variable_scope("BatchNorm"):
+    super(BNLSTMCell, self).__init__(is_training, num_units,
+                                     forget_bias, input_size)
+    with tf.variable_scope("LSTMBatchNorm"):
       tf.get_variable("xgamma", initializer=tf.ones([4*num_units])/10)
       tf.get_variable("hgamma", initializer=tf.ones([4*num_units])/10)
       tf.get_variable("cgamma", initializer=tf.ones([num_units])/10)
       tf.get_variable("cbeta", initializer=tf.zeros([num_units]))
-
-  def _batch_norm(self, x, xmean, xvar, gamma=None, beta=None,
-                  variance_epsilon=1e-5):
-    control_inputs = []
-    if self._is_training:
-      mean, variance = tf.nn.moments(x, axes=[0])
-      update_moving_mean = moving_averages.assign_moving_average(
-          xmean, mean, 0.95)
-      update_moving_variance = moving_averages.assign_moving_average(
-          xvar, variance, 0.95)
-      control_inputs = [update_moving_mean, update_moving_variance]
-    else:
-      mean = xmean
-      variance = xvar
-    with tf.control_dependencies(control_inputs):
-      return tf.nn.batch_normalization(x, mean, variance,
-                scale=gamma, offset=beta, variance_epsilon=variance_epsilon)
 
   def __call__(self, inputs, state, time_step):
     with tf.variable_scope("BasicLSTMCell", reuse=True):
@@ -133,13 +140,13 @@ class BNLSTMCell(BasicLSTMCell):
       W = tf.get_variable("W")
       b = tf.get_variable("b")
 
-    with tf.variable_scope("BatchNorm", reuse=True):
+    with tf.variable_scope("LSTMBatchNorm", reuse=True):
       xgamma = tf.get_variable("xgamma")
       hgamma = tf.get_variable("hgamma")
       cgamma = tf.get_variable("cgamma")
       cbeta = tf.get_variable("cbeta")
 
-    with tf.variable_scope("BN-Stats-T%s" % time_step):
+    with tf.variable_scope("BNLSTM-Stats-T%s" % time_step):
       xmean = tf.get_variable("xmean",
           initializer=tf.zeros([4*self._num_units]), trainable=False)
       xvar = tf.get_variable("xvar",
@@ -157,13 +164,16 @@ class BNLSTMCell(BasicLSTMCell):
 
     # i, j, f, o = BN(hH) + BN(xW) + b
     # these have no betas, we let the single bias b take care of this
-    xconcat = self._batch_norm(tf.matmul(inputs, W), xmean, xvar, xgamma)
-    hconcat = self._batch_norm(tf.matmul(h, H), hmean, hvar, hgamma)
+    xconcat = _batch_norm(self._is_training, tf.matmul(inputs, W),
+                          xmean, xvar, xgamma)
+    hconcat = _batch_norm(self._is_training, tf.matmul(h, H),
+                          hmean, hvar, hgamma)
     concat = xconcat + hconcat + b
     i, j, f, o = tf.split(1, 4, concat)
 
     new_c = c * tf.sigmoid(f + self._forget_bias) + tf.sigmoid(i) * tf.tanh(j)
-    new_c_bn = self._batch_norm(new_c, cmean, cvar, cgamma, cbeta)
+    new_c_bn = _batch_norm(self._is_training, new_c,
+                           cmean, cvar, cgamma, cbeta)
     new_h = tf.tanh(new_c_bn) * tf.sigmoid(o)
 
     if not self.is_training and time_step in [0, 49, 99]:
@@ -186,18 +196,15 @@ class BNLSTMCell(BasicLSTMCell):
 
     return new_h, tf.concat(1, [new_c, new_h])
 
+
 class GRUCell(RNNCell):
   """Gated Recurrent Unit cell implementation, mostly copied from TensorFlow."""
-
   def __init__(self, is_training, num_units, input_size=None, bias=1.0):
     self._num_units = num_units
     self._input_size = input_size or num_units
     self._is_training = is_training
     self._bias = bias
 
-    # [r, u] = sigmoid(x*W + h*H + B)
-    # h_tilde = x*Wh + (r * h) * Hh
-    # h_new = u * h_old + (1-u) * h_tilde
     with tf.variable_scope("GRUCell"):
       # Gate weights
       W = tf.get_variable("W", [self._input_size, 2*self._num_units])
@@ -228,12 +235,88 @@ class GRUCell(RNNCell):
       Wh = tf.get_variable("Wh")
       Hh = tf.get_variable("Hh")
 
+    # [r, u] = sigmoid(x*W + h*H + B)
+    # h_tilde = x*Wh + (r o h) * Hh
+    # h_new = u * h_old + (1-u) * tanh(h_tilde)
     concat = tf.matmul(inputs, W) + tf.matmul(state, H) + B + self._bias
     r, u = tf.split(1, 2, tf.sigmoid(concat))
-    h_tilde = tf.tanh(tf.matmul(inputs, Wh) + r * tf.matmul(state, Hh))
-    new_h = u * state + (1 - u) * h_tilde
+    h_tilde = tf.matmul(inputs, Wh) + r * tf.matmul(state, Hh)
+    new_h = u * state + (1 - u) * tf.tanh(h_tilde)
 
     return new_h, new_h
+
+
+class BNGRUCell(GRUCell):
+  """Batch normalized Gated Recurrent Unit cell implementation."""
+
+  def __init__(self, is_training, num_units, input_size=None, bias=1.0):
+    super(BNGRUCell, self).__init__(is_training, num_units,
+                                    input_size=input_size, bias=bias)
+    with tf.variable_scope("GRUBatchNorm"):
+      # Means and variances for gate BN.
+      tf.get_variable("xgamma", initializer=tf.ones([2*num_units])/10)
+      tf.get_variable("hgamma", initializer=tf.ones([2*num_units])/10)
+      # Means and variances for actual memory content BN.
+      tf.get_variable("mgamma", initializer=tf.ones([num_units])/10)
+      tf.get_variable("mbeta", initializer=tf.zeros([num_units]))
+
+  @property
+  def state_size(self):
+    return self._num_units
+
+  @property
+  def input_size(self):
+    return self._input_size
+
+  @property
+  def output_size(self):
+    return self._num_units
+
+  def __call__(self, inputs, state, time_step):
+    with tf.variable_scope("GRUBatchNorm", reuse=True):
+      xgamma = tf.get_variable("xgamma")
+      hgamma = tf.get_variable("hgamma")
+      mgamma = tf.get_variable("mgamma")
+      mbeta = tf.get_variable("mbeta")
+
+    with tf.variable_scope("GRUCell", reuse=True):
+      W = tf.get_variable("W")
+      H = tf.get_variable("H")
+      B = tf.get_variable("B")
+      Wh = tf.get_variable("Wh")
+      Hh = tf.get_variable("Hh")
+
+    # Means and variables for each time_step.
+    with tf.variable_scope("BNGRU-Stats-T%s" % time_step):
+      xmean = tf.get_variable("xmean",
+          initializer=tf.zeros([2*self._num_units]), trainable=False)
+      xvar = tf.get_variable("xvar",
+          initializer=tf.ones([2*self._num_units]), trainable=False)
+      hmean = tf.get_variable("hmean",
+          initializer=tf.zeros([2*self._num_units]), trainable=False)
+      hvar = tf.get_variable("hvar",
+          initializer=tf.ones([2*self._num_units]), trainable=False)
+      mmean = tf.get_variable("mmean",
+          initializer=tf.zeros([self._num_units]), trainable=False)
+      mvar = tf.get_variable("mvar",
+          initializer=tf.ones([self._num_units]), trainable=False)
+
+    # [r, u] = sigmoid(BN(x*W) + BN(h*H) + B)
+    # h_tilde = x*Wh + (r o h) * Hh
+    # h_new = u * h_old + (1-u) * tanh(BN(h_tilde))
+    bn_x = _batch_norm(self._is_training, tf.matmul(inputs, W),
+                       xmean, xvar, xgamma)
+    bn_h = _batch_norm(self._is_training, tf.matmul(state, H),
+                       hmean, hvar, hgamma)
+    concat = bn_x + bn_h + B + self._bias
+    r, u = tf.split(1, 2, tf.sigmoid(concat))
+    h_tilde = tf.matmul(inputs, Wh) + r * tf.matmul(state, Hh)
+    bn_h_tilde = _batch_norm(self._is_training, h_tilde,
+                             mmean, mvar, mgamma, mbeta)
+    new_h = u * state + (1 - u) * bn_h_tilde
+
+    return new_h, new_h
+
 
 class DropoutWrapper(RNNCell):
   """Operator adding dropout to inputs and outputs of the given cell."""
