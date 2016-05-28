@@ -195,7 +195,7 @@ class GRUCell(RNNCell):
 
     # r = sigmoid(x*Wr + h_old*Hr)
     # u = sigmoid(x*Wu + h_old*Hu)
-    with vs.variable_scope("GRUCell"):
+    with tf.variable_scope("GRUCell"):
       # Update gate weights
       Wu = tf.get_variable("Wu", [self._input_size, self._num_units])
       Hu = tf.get_variable("Hu", [self._num_units, self._num_units])
@@ -218,9 +218,9 @@ class GRUCell(RNNCell):
   def output_size(self):
     return self._num_units
 
-  def __call__(self, inputs, state):
+  def __call__(self, inputs, state, time_step):
     """Gated recurrent unit (GRU) with nunits cells."""
-    with vs.variable_scope("GRUCell", reuse=True):
+    with tf.variable_scope("GRUCell", reuse=True):
       Wu = tf.get_variable("Wu")
       Hu = tf.get_variable("Hu")
       Wr = tf.get_variable("Wr")
@@ -230,7 +230,7 @@ class GRUCell(RNNCell):
 
     r = tf.sigmoid(tf.matmul(inputs, Wr) + tf.matmul(state, Hr))
     u = tf.sigmoid(tf.matmul(inputs, Wu) + tf.matmul(state, Hu))
-    h_tilde = tf.tanh(tf.matmul(inputs, W) + r * tf.matmul(inputs, H))
+    h_tilde = tf.tanh(tf.matmul(inputs, W) + r * tf.matmul(state, H))
     new_h = u * state + (1 - u) * h_tilde
 
     return new_h, new_h
