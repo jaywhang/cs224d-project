@@ -34,6 +34,7 @@ This branch doesn't support restarting and TensorBoard stuff for now.
 
 ### Comparing loss values from different models
 Inside `results` folder, run:
+
     ./plot_graphs.py \
         bs_64_ct_bnlstm_hs_300_kp_1.0_lr_0.002_mgn_1.0_op_adam_sl_100_vs_50 \
         bs_64_ct_lstm_hs_300_kp_1.0_lr_0.002_mgn_1.0_op_adam_sl_100_vs_50
