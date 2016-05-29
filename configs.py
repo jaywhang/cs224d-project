@@ -15,6 +15,7 @@ FLAG_TO_NAME_MAP = {
     'vs': 'vocab_size',
     'op': 'optimizer',
     'ct': 'cell_type',
+    'ef': 'eval_frequency',
 }
 
 
@@ -31,8 +32,9 @@ class CharacterModelLSTMConfig(object):
     self.max_grad_norm = 1.0
     self.vocab_size = vocab_size
     self.optimizer = 'adam'  # or 'sgd'
-    self.cell_type = 'lstm'  # or 'bnlstm'
+    self.cell_type = 'lstm'  # or 'bnlstm', 'gru', 'bngru.full', 'bngru.simple'
     self.is_training = True
+    self.eval_frequency = None  # by default eval every epoch.
 
     # self.hidden_depth = 1  # not supported.
 
@@ -46,5 +48,5 @@ class CharacterModelLSTMConfig(object):
                                      key=lambda x: x[0]))
 
     pairs = [flag + '_' + str(getattr(self, name))
-             for flag, name in ordered_map.iteritems() if flag != 'me']
+             for flag, name in ordered_map.iteritems()]
     return '_'.join(pairs)

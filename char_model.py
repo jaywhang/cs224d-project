@@ -28,6 +28,14 @@ class CharacterModel(object):
       cell = rnn_cell.BasicLSTMCell(config.is_training, config.hidden_size)
     elif config.cell_type == 'bnlstm':
       cell = rnn_cell.BNLSTMCell(config.is_training, config.hidden_size)
+    elif config.cell_type == 'gru':
+      cell = rnn_cell.GRUCell(config.is_training, config.hidden_size)
+    elif config.cell_type == 'bngru.full':
+      cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
+                                full_bn=True)
+    elif config.cell_type == 'bngru.simple':
+      cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
+                                full_bn=False)
     else:
       raise ValueError('Unknown cell_type: %s' % config.cell_type)
 
@@ -90,10 +98,6 @@ class CharacterModel(object):
         raise ValueError('Invalid optimizer: %s' % config.optimizer)
       self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
-      # hold merged variables in the training set
-    if not config.is_training:  # shouldn't need this if but just in case
-      self.merged_summaries = tf.merge_all_summaries()
-
   @property
   def config(self):
     return self._config
@@ -138,6 +142,20 @@ class CharacterModel(object):
   def zero_state(self):
     return self._cell.zero_state(self._config.batch_size, tf.float32)
 
+  # Runs one iteration of training.
+  def train(self, sess, inputs, labels, initial_state=None):
+    if initial_state:
+      state = initial_state
+    else:
+      state = np.zeros([self._config.batch_size, self._cell.state_size])
+
+    loss, perp, _, = sess.run([self.loss, self.perplexity, self.train_op],
+                              feed_dict={self.input_seq: inputs,
+                                          self.target_seq: labels,
+                                          self.initial_state: state})
+
+    return loss, perp
+
   def run_epoch(self, sess, data_iterator, summary_writer=None, step=None, verbose=True):
     """Runs one epoch of training."""
     start_time = time.time()
@@ -149,24 +167,16 @@ class CharacterModel(object):
     else:
       train_op = tf.no_op()
 
-    if summary_writer:
-      summary_op = self.merged_summaries
-    else:
-      summary_op = tf.no_op()
-
     for inputs, labels, i, num_batches in data_iterator:
       # don't save the state, exactly seq_length sequences for now.
       # loss, perp, _, state = sess.run(
-      loss, perp, _, _, summary = sess.run(
-          [self.loss, self.perplexity, train_op, self.final_state, summary_op],
+      loss, perp, _ = sess.run(
+          [self.loss, self.perplexity, train_op],
           feed_dict={self.input_seq: inputs,
                      self.target_seq: labels,
                      self.initial_state: state})
       losses.append(loss)
       perplexities.append(perp)
-
-      if i == 0 and summary_writer:
-        summary_writer.add_summary(summary, step)
 
       if verbose and (i % 10 == 0 or i == num_batches-1):
         sys.stdout.write('\r{} / {} : loss = {:.4f}, perp = {:.3f}'.format(
