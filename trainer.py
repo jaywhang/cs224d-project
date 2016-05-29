@@ -17,10 +17,6 @@ flags.DEFINE_string('model_type', 'char', 'model type. "char" or "word"')
 flags.DEFINE_string('data_path', None, 'path to data file/folder')
 flags.DEFINE_string('data_type', 'text', 'type of training data.')
 flags.DEFINE_string('output_dir', None, 'folder path to dump output files to.')
-flags.DEFINE_bool('sample_during_training', False,
-                    'if True, produce sample phrases after every epoch')
-flags.DEFINE_bool('restart_training', False,
-                    'if True, restart training from saved parameters')
 
 # For optionally overwriting hyperparameter values.
 flags.DEFINE_string('ct', None, 'cell_type')
@@ -31,6 +27,8 @@ flags.DEFINE_float('lr', None, 'learning_rate')
 flags.DEFINE_integer('hs', None, 'hidden_size')
 flags.DEFINE_float('kp', None, 'keep_prob')
 flags.DEFINE_float('mgn', None, 'max_grad_norm')
+# how often to evaluate on valid data.  either not set or a number.
+flags.DEFINE_integer('ef', None, 'eval_frequency')
 
 
 FLAGS = flags.FLAGS
@@ -40,7 +38,7 @@ def get_config(vocab_size, inference=False):
   config = CharacterModelLSTMConfig(vocab_size)
 
   # Override values specified in commandline flags.
-  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp', 'mgn']
+  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp', 'mgn', 'ef']
 
   for param in params:
     value = getattr(FLAGS, param)
@@ -59,85 +57,47 @@ def save_training_info(config, test_loss, test_perp, output_dir):
     f.write(config_string + '\n')
     f.write('Test loss: %.4f, perplexity: %.2f' % (test_loss, test_perp))
 
-def read_training_info(output_dir):
-  loss_pp, epoch_losses, epoch_perps = [], [], []
-  with open(os.path.join(output_dir, 'iter_loss_pp.csv'), 'r') as f:
-    reader = csv.reader(f, quoting=csv.QUOTE_NONE)
-    for row in reader:
-      loss_pp.append((row[1], row[2]))
 
-  with open(os.path.join(output_dir, 'train_valid_loss.csv'), 'r') as f:
-    reader = csv.reader(f, quoting=csv.QUOTE_NONE)
-    for row in reader:
-      epoch_losses.append((row[1], row[2]))
-
-  with open(os.path.join(output_dir, 'train_valid_perplexity.csv'), 'r') as f:
-    reader = csv.reader(f, quoting=csv.QUOTE_NONE)
-    for row in reader:
-      epoch_perps.append((row[1], row[2]))
-
-  return loss_pp, epoch_losses, epoch_perps
-
-def save_losses(loss_pp, epoch_losses, epoch_perps, output_dir):
-  with open(os.path.join(output_dir, 'iter_loss_pp.csv'), 'w') as f:
+def save_losses(train_loss_pp, eval_loss_pp, output_dir):
+  with open(os.path.join(output_dir, 'train_loss_pp.csv'), 'w') as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
-    for i, (loss, perp) in enumerate(loss_pp):
-      writer.writerow((i+1, loss, perp))
+    writer.writerows(train_loss_pp)
 
-  with open(os.path.join(output_dir, 'train_valid_loss.csv'), 'w') as f:
+  with open(os.path.join(output_dir, 'eval_loss_pp.csv'), 'w') as f:
     writer = csv.writer(f, quoting=csv.QUOTE_NONE)
-    for i, (train_loss, valid_loss) in enumerate(epoch_losses):
-      writer.writerow((i+1, train_loss, valid_loss))
-
-  with open(os.path.join(output_dir, 'train_valid_perplexity.csv'), 'w') as f:
-    writer = csv.writer(f, quoting=csv.QUOTE_NONE)
-    for i, (train_perp, valid_perp) in enumerate(epoch_perps):
-      writer.writerow((i+1, train_perp, valid_perp))
+    writer.writerows(eval_loss_pp)
 
 
-def save_plots(loss_pp, epoch_losses, epoch_perps, output_dir):
-  if FLAGS.restart_training: return
-  x = np.arange(len(epoch_losses))
-  plt.grid(True)
+def save_plots(train_loss_pp, eval_loss_pp, output_dir):
+  train_iters, train_losses, train_pps = zip(*train_loss_pp)
+  eval_iters, eval_tl, eval_tp, eval_vl, eval_vp = zip(*eval_loss_pp)
 
-  # Train vs valid loss on.
-  train_losses, valid_losses = zip(*epoch_losses)
-  plt.plot(x, train_losses, label='Train')
-  plt.plot(x, valid_losses, label='Valid')
-  plt.xlabel('Epoch')
-  plt.ylabel('Loss')
-  plt.legend()
-  plt.savefig(os.path.join(output_dir, 'loss.pdf'))
+  def plot_single(x, y1, y2, ylabel, filename,
+                  legend=False, y1_label=None, y2_label=None):
+    plt.clf()
+    plt.grid(True)
+    plt.plot(x, y1, label=y1_label)
+    if y2:
+      plt.plot(x, y2, label=y2_label)
+    plt.xlabel('Iteration')
+    plt.ylabel(ylabel)
+    if legend: plt.legend()
+    plt.savefig(os.path.join(output_dir, filename))
 
-  plt.clf()
-  plt.grid(True)
-  # Train vs valid perplexity.
-  train_pp, valid_pp = zip(*epoch_perps)
-  plt.plot(x, train_pp, label='Train')
-  plt.plot(x, valid_pp, label='Valid')
-  plt.xlabel('Epoch')
-  plt.ylabel('Perplexity')
-  plt.legend()
-  plt.savefig(os.path.join(output_dir, 'perplexity.pdf'))
-
-  plt.clf()
-  plt.grid(True)
   # Plot of train loss from every iteration.
-  losses, perps = zip(*loss_pp)
-  x = np.arange(len(loss_pp))
-  plt.plot(x, losses)
-  plt.xlabel('Iteration')
-  plt.ylabel('Train Loss')
-  plt.savefig(os.path.join(output_dir, 'train_loss.pdf'))
+  plot_single(train_iters, train_losses, None, 'Train Loss', 'train_loss.pdf')
 
-  plt.clf()
-  plt.grid(True)
   # Plot of train perplexity from every iteration.
-  plt.plot(x, perps)
-  plt.plot(x, perps)
-  plt.xlabel('Iteration')
-  plt.ylabel('Train Perplexity')
-  plt.savefig(os.path.join(output_dir, 'train_perplexity.pdf'))
+  plot_single(train_iters, train_pps, None, 'Train Perplexity', 'train_perplexity.pdf')
+
+  # Sampled train vs valid losses.
+  plot_single(eval_iters, eval_tl, eval_vl, 'Loss', 'eval_loss.pdf',
+              legend=True, y1_label='Train', y2_label='Valid')
+  
+  # Sampled train vs valid perplexities.
+  plot_single(eval_iters, eval_tp, eval_vp, 'Perplexity', 'eval_perplexity.pdf',
+              legend=True, y1_label='Train', y2_label='Valid')
+
 
 def main(_):
   if not FLAGS.data_path:
@@ -161,9 +121,6 @@ def main(_):
   train_config = get_config(train_reader.vocab_size)
   # Need to use train data's vocabulary for eval model.
   eval_config = get_config(train_reader.vocab_size, inference=True)
-  if FLAGS.sample_during_training:
-    sample_config = get_config(train_reader.vocab_size, inference=True)
-    sample_config.seq_length = sample_config.batch_size = 1
 
   print (train_config)
 
@@ -173,17 +130,17 @@ def main(_):
       train_model = CharacterModel(train_config)
     with tf.variable_scope('model', reuse=True):
       eval_model = CharacterModel(eval_config)
-      if FLAGS.sample_during_training:
-        sample_model = CharacterModel(sample_config)
 
     saver = tf.train.Saver()
 
     tf.initialize_all_variables().run()
     # Losses and perplexities from all iterations from train data.
+    # Contains (iteration, loss, pp) tuples.
     train_loss_pp = []
-    # Per-epoch train and valid losses.
-    epoch_losses = []
-    epoch_perps = []
+    # Train and valid losses/pp, either sampled every epoch or eval_frequency
+    # if given.
+    # Contains (iteration, train_loss, train_pp, valid_loss, valid_pp) tuples.
+    eval_loss_pp = []
 
     if FLAGS.output_dir:
       outdir = os.path.join(FLAGS.output_dir, train_config.filename())
@@ -194,74 +151,96 @@ def main(_):
         os.path.join('tensorboard', train_config.filename(), 'test'),
         sess.graph)
 
-    if FLAGS.restart_training:
-      if not FLAGS.output_dir:
-        raise ValueError("Set restart_training flag but not output_dir flag")
-      train_loss_pp, epoch_losses, epoch_perps = read_training_info(outdir)
-      saver.restore(sess, outdir + "/parameters")
-      print("Loaded %s epochs and last weights!" % len(epoch_losses))
+    # Get endless iterator for training, and single-epoch iterator for eval.
+    train_iterator = train_reader.endless_iterator(train_config.batch_size,
+                                                    train_config.seq_length)
+    valid_iterator = valid_reader.iterator(eval_config.batch_size,
+                                           eval_config.seq_length)
 
-    if (len(epoch_losses) >= train_config.max_epoch):
-      print("Already exceeded max epochs of training: %s, %s" %
-              (len(epoch_losses, train_config.max_epoch)))
-      return
-
+    last_epoch = 0  # both epoch and iter are 1-based.
+    train_start_time = epoch_start_time = time.time()
     print('Starting training.')
-    train_start_time = time.time()
+    total_start_time = time.time()
+    for inputs, labels, iter, epoch_size, cur_epoch in train_iterator: 
+      if cur_epoch > last_epoch:
+        last_epoch = cur_epoch
 
-    for i in xrange(len(epoch_losses)+1, train_config.max_epoch+1):
-      # Get new iterators.
-      train_iterator = train_reader.iterator(train_config.batch_size,
-                                             train_config.seq_length)
-      valid_iterator = valid_reader.iterator(eval_config.batch_size,
-                                             eval_config.seq_length)
-
-      print('Starting epoch %d / %d' % (i, train_config.max_epoch))
-      new_losses, new_perps, num_batches = train_model.run_epoch(
-          sess, train_iterator)
-      train_loss_pp.extend(zip(new_losses, new_perps))
-      print(' -- Train loss: %.4f, perp: %.2f' %
-            (new_losses[-1], new_perps[-1]))
-
-      # Calculate validation loss.
-      start_time = time.time()
-      valid_losses, valid_perps, _ = eval_model.run_epoch(
-          sess, valid_iterator, verbose=False,
-          summary_writer=test_writer, step=i)
-      elapsed = time.time() - start_time
-      print(' -- Valid loss: %.4f, perp: %.2f (took %.2f sec)' %
-            (np.mean(valid_losses), np.mean(valid_perps), elapsed))
-
-      epoch_losses.append((new_losses[-1], np.mean(valid_losses)))
-      epoch_perps.append((new_perps[-1], np.mean(valid_perps)))
-
-      if FLAGS.output_dir:
-        save_plots(train_loss_pp, epoch_losses, epoch_perps, outdir)
-        save_losses(train_loss_pp, epoch_losses, epoch_perps, outdir)
-        if i % 5 == 0:
-          saver.save(sess, os.path.join(outdir, 'parameters'))
-          print("Checkpointed parameters")
-
-      print("")
-
-      if FLAGS.sample_during_training:
-        if FLAGS.model_type == 'char':
-          delim = ''
-          start_token = 'i'
+        if cur_epoch > train_config.max_epoch:
+          break
         else:
-          delim = ' '
-          start_token = '<eos>'
-        sample = train_reader.decode(
-            sample_model.sample(sess, train_reader.encode([start_token]), 30))
-        elapsed = time.time() - start_time
-        sample = delim.join(sample)
-        print(' -- Sample from epoch %d (took %.2f sec)' % (i, elapsed))
-        print('---------------------------')
-        print(sample)
-        print('---------------------------\n')
+          print('\r[Epoch %d / %d started]                     '
+                % (cur_epoch, train_config.max_epoch))
 
-    total_train_time = time.time() - train_start_time
-    print('\nTraining finished after %.2f sec' % total_train_time)
+      # We're not feeding in initial state on purpose.
+      loss, pp = train_model.train(sess, inputs, labels)
+      if iter % 20 == 0:
+        train_loss_pp.append((iter, loss, pp))
+
+      # We've reached the end of epoch.
+      if iter % epoch_size == 0:
+        elapsed = time.time() - epoch_start_time
+        epoch_start_time = time.time()
+        print('\r[Epoch %d / %d finished in %.2f sec]           '
+              % (cur_epoch, train_config.max_epoch, elapsed))
+
+      # Sample eval loss and pp.
+      if ((train_config.eval_frequency is None  # every epoch
+           and iter % epoch_size == 0) or
+          (train_config.eval_frequency is not None  # every eval_frequency
+           and iter % train_config.eval_frequency == 0)):
+
+        train_elapsed = time.time() - train_start_time
+
+        # Calculate validation loss.
+        valid_start_time = time.time()
+        valid_losses, valid_pps, _ = eval_model.run_epoch(
+            sess, valid_iterator, verbose=False,
+            summary_writer=test_writer, step=iter)
+        valid_elapsed = time.time() - valid_start_time
+        valid_loss, valid_pp = np.mean(valid_losses), np.mean(valid_pps)
+        eval_loss_pp.append((iter, loss, pp, valid_loss, valid_pp))
+
+        print('\r  Iter %d                                  ' % iter)
+        print('\r    -- Train loss: %.4f, perp: %.2f (took %.2f sec)'
+              % (loss, pp, train_elapsed))
+        print('\r    -- Valid loss: %.4f, perp: %.2f (took %.2f sec)'
+              % (valid_loss, valid_pp, valid_elapsed))
+
+        save_plots(train_loss_pp, eval_loss_pp, outdir)
+        save_losses(train_loss_pp, eval_loss_pp, outdir)
+
+        # Reset valid iterator.
+        valid_iterator = valid_reader.iterator(eval_config.batch_size,
+                                              eval_config.seq_length)
+        train_start_time = time.time()
+
+      if (iter % epoch_size) % 10 == 0:
+        _cur_iter = iter % epoch_size
+        if _cur_iter == 0: _cur_iter = epoch_size
+        sys.stdout.write('\r{} / {} : loss = {:.4f}, pp = {:.2f}'.format(
+          _cur_iter, epoch_size, loss, pp))
+        sys.stdout.flush()
+
+      if FLAGS.output_dir and iter % epoch_size == 0 and cur_epoch % 5 == 0:
+        saver.save(sess, os.path.join(outdir, 'parameters'))
+        print("Checkpointed parameters")
+
+    # Final sample of eval loss and pp.
+    valid_start_time = time.time()
+    valid_losses, valid_pps, _ = eval_model.run_epoch(
+        sess, valid_iterator, verbose=False,
+        summary_writer=test_writer, step=iter)
+    valid_elapsed = time.time() - valid_start_time
+    valid_loss, valid_pp = np.mean(valid_losses), np.mean(valid_pps)
+    eval_loss_pp.append((iter, loss, pp, valid_loss, valid_pp))
+
+    print('\r -- [Iter %d] Train loss: %.4f, perp: %.2f' % train_loss_pp[-1])
+    print('\r -- [Iter %d] Valid loss: %.4f, perp: %.2f (took %.2f sec)' %
+          (iter, valid_loss, valid_pp, valid_elapsed))
+
+    # Training is done at this point.
+    total_train_time = time.time() - total_start_time
+    print('Training finished after %.2f sec' % total_train_time)
 
     # Calculate test loss.
     start_time = time.time()
@@ -274,11 +253,11 @@ def main(_):
           (np.mean(test_losses), np.mean(test_perps), elapsed))
 
     if FLAGS.output_dir:
-      save_plots(train_loss_pp, epoch_losses, epoch_perps, outdir)
-      save_losses(train_loss_pp, epoch_losses, epoch_perps, outdir)
+      save_plots(train_loss_pp, eval_loss_pp, outdir)
+      save_losses(train_loss_pp, eval_loss_pp, outdir)
+      saver.save(sess, os.path.join(outdir, 'parameters'))
       save_training_info(train_config, np.mean(test_losses),
                          np.mean(test_perps), outdir)
-      saver.save(sess, os.path.join(outdir, 'parameters'))
 
 
 if __name__ == "__main__":
