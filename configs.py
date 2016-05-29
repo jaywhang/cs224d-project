@@ -31,7 +31,7 @@ class CharacterModelLSTMConfig(object):
     self.max_grad_norm = 1.0
     self.vocab_size = vocab_size
     self.optimizer = 'adam'  # or 'sgd'
-    self.cell_type = 'lstm'  # or 'bnlstm'
+    self.cell_type = 'lstm'  # or 'bnlstm', 'gru', 'bngru'
     self.is_training = True
 
     # self.hidden_depth = 1  # not supported.
