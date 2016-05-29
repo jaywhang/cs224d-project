@@ -30,8 +30,12 @@ class CharacterModel(object):
       cell = rnn_cell.BNLSTMCell(config.is_training, config.hidden_size)
     elif config.cell_type == 'gru':
       cell = rnn_cell.GRUCell(config.is_training, config.hidden_size)
-    elif config.cell_type == 'bngru':
-      cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size)
+    elif config.cell_type == 'bngru.full':
+      cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
+                                full_bn=True)
+    elif config.cell_type == 'bngru.simple':
+      cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
+                                full_bn=False)
     else:
       raise ValueError('Unknown cell_type: %s' % config.cell_type)
 

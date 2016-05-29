@@ -249,21 +249,26 @@ class GRUCell(RNNCell):
 class BNGRUCell(GRUCell):
   """Batch normalized Gated Recurrent Unit cell implementation."""
 
-  def __init__(self, is_training, num_units, input_size=None, bias=1.0):
+  def __init__(self, is_training, num_units,
+               input_size=None, bias=1.0, full_bn=True):
     super(BNGRUCell, self).__init__(is_training, num_units,
                                     input_size=input_size, bias=bias)
+    self._full_bn = full_bn
     with tf.variable_scope("GRUBatchNorm"):
       # Means and variances for gate BN.
       tf.get_variable("xgamma", initializer=tf.ones([2*num_units])/10)
       tf.get_variable("hgamma", initializer=tf.ones([2*num_units])/10)
-      # Means and variances for h_tilde BN.
-      tf.get_variable("hx_gamma", initializer=tf.ones([num_units])/10)
-      tf.get_variable("hx_beta", initializer=tf.zeros([num_units]))
-      tf.get_variable("hh_gamma", initializer=tf.ones([num_units])/10)
-      tf.get_variable("hh_beta", initializer=tf.zeros([num_units]))
       # Means and variances for actual memory content BN.
       tf.get_variable("mgamma", initializer=tf.ones([num_units])/10)
       tf.get_variable("mbeta", initializer=tf.zeros([num_units]))
+
+      # We batch normalize more terms if full_bn is set.
+      if full_bn:
+        # Means and variances for h_tilde BN.
+        tf.get_variable("hx_gamma", initializer=tf.ones([num_units])/10)
+        tf.get_variable("hx_beta", initializer=tf.zeros([num_units]))
+        tf.get_variable("hh_gamma", initializer=tf.ones([num_units])/10)
+        tf.get_variable("hh_beta", initializer=tf.zeros([num_units]))
 
   @property
   def state_size(self):
@@ -281,12 +286,14 @@ class BNGRUCell(GRUCell):
     with tf.variable_scope("GRUBatchNorm", reuse=True):
       xgamma = tf.get_variable("xgamma")
       hgamma = tf.get_variable("hgamma")
-      hx_gamma = tf.get_variable("hx_gamma")
-      hx_beta = tf.get_variable("hx_beta")
-      hh_gamma = tf.get_variable("hh_gamma")
-      hh_beta = tf.get_variable("hh_beta")
       mgamma = tf.get_variable("mgamma")
       mbeta = tf.get_variable("mbeta")
+
+      if self._full_bn:
+        hx_gamma = tf.get_variable("hx_gamma")
+        hx_beta = tf.get_variable("hx_beta")
+        hh_gamma = tf.get_variable("hh_gamma")
+        hh_beta = tf.get_variable("hh_beta")
 
     with tf.variable_scope("GRUCell", reuse=True):
       W = tf.get_variable("W")
@@ -305,33 +312,45 @@ class BNGRUCell(GRUCell):
           initializer=tf.zeros([2*self._num_units]), trainable=False)
       hvar = tf.get_variable("hvar",
           initializer=tf.ones([2*self._num_units]), trainable=False)
-      hx_mean = tf.get_variable("hx_mean",
-          initializer=tf.zeros([self._num_units]), trainable=False)
-      hx_var = tf.get_variable("hx_var",
-          initializer=tf.ones([self._num_units]), trainable=False)
-      hh_mean = tf.get_variable("hh_mean",
-          initializer=tf.zeros([self._num_units]), trainable=False)
-      hh_var = tf.get_variable("hh_var",
-          initializer=tf.ones([self._num_units]), trainable=False)
       mmean = tf.get_variable("mmean",
           initializer=tf.zeros([self._num_units]), trainable=False)
       mvar = tf.get_variable("mvar",
           initializer=tf.ones([self._num_units]), trainable=False)
 
-    # [r, u] = sigmoid(BN(x*W) + BN(h*H) + B)
-    # h_tilde = BN(x*Wh) + r o BN(h*Hh)
-    # h_new = u * h_old + (1-u) * tanh(BN(h_tilde))
+      if self._full_bn:
+        hx_mean = tf.get_variable("hx_mean",
+            initializer=tf.zeros([self._num_units]), trainable=False)
+        hx_var = tf.get_variable("hx_var",
+            initializer=tf.ones([self._num_units]), trainable=False)
+        hh_mean = tf.get_variable("hh_mean",
+            initializer=tf.zeros([self._num_units]), trainable=False)
+        hh_var = tf.get_variable("hh_var",
+            initializer=tf.ones([self._num_units]), trainable=False)
+
+    # "Full" BN:
+    #     [r, u] = sigmoid(BN(x*W) + BN(h*H) + B)
+    #     h_tilde = BN(x*Wh) + r o BN(h*Hh)
+    #     h_new = u * h_old + (1-u) * tanh(BN(h_tilde))
+    #
+    # "Simple" BN:
+    #     [r, u] = sigmoid(BN(x*W) + BN(h*H) + B)
+    #     h_tilde = x*Wh + r o h*Hh
+    #     h_new = u * h_old + (1-u) * tanh(BN(h_tilde))
+
     bn_x = _batch_norm(self._is_training, tf.matmul(inputs, W),
                        xmean, xvar, xgamma)
     bn_h = _batch_norm(self._is_training, tf.matmul(state, H),
                        hmean, hvar, hgamma)
     concat = bn_x + bn_h + B + self._bias
     r, u = tf.split(1, 2, tf.sigmoid(concat))
-    bn_Wh = _batch_norm(self._is_training, tf.matmul(inputs, Wh),
-                        hx_mean, hx_var, hx_gamma, hx_beta)
-    bn_Hh = _batch_norm(self._is_training, tf.matmul(inputs, Wh),
-                        hh_mean, hh_var, hh_gamma, hh_beta)
-    h_tilde = bn_Wh + r * bn_Hh
+    if self._full_bn:
+      bn_Wh = _batch_norm(self._is_training, tf.matmul(inputs, Wh),
+                          hx_mean, hx_var, hx_gamma, hx_beta)
+      bn_Hh = _batch_norm(self._is_training, tf.matmul(state, Hh),
+                          hh_mean, hh_var, hh_gamma, hh_beta)
+      h_tilde = bn_Wh + r * bn_Hh
+    else:
+      h_tilde = tf.matmul(inputs, Wh) + r * tf.matmul(state, Hh)
     bn_h_tilde = _batch_norm(self._is_training, h_tilde,
                              mmean, mvar, mgamma, mbeta)
     new_h = u * state + (1 - u) * tf.tanh(bn_h_tilde)
