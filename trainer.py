@@ -93,7 +93,7 @@ def save_plots(train_loss_pp, eval_loss_pp, output_dir):
   # Sampled train vs valid losses.
   plot_single(eval_iters, eval_tl, eval_vl, 'Loss', 'eval_loss.pdf',
               legend=True, y1_label='Train', y2_label='Valid')
-  
+
   # Sampled train vs valid perplexities.
   plot_single(eval_iters, eval_tp, eval_vp, 'Perplexity', 'eval_perplexity.pdf',
               legend=True, y1_label='Train', y2_label='Valid')
@@ -149,7 +149,7 @@ def main(_):
 
     test_writer = tf.train.SummaryWriter(
         os.path.join('tensorboard', train_config.filename(), 'test'),
-        sess.graph)
+        sess.graph, flush_secs=30)
 
     # Get endless iterator for training, and single-epoch iterator for eval.
     train_iterator = train_reader.endless_iterator(train_config.batch_size,
@@ -161,7 +161,7 @@ def main(_):
     train_start_time = epoch_start_time = time.time()
     print('Starting training.')
     total_start_time = time.time()
-    for inputs, labels, iter, epoch_size, cur_epoch in train_iterator: 
+    for inputs, labels, iter, epoch_size, cur_epoch in train_iterator:
       if cur_epoch > last_epoch:
         last_epoch = cur_epoch
 

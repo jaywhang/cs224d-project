@@ -84,6 +84,10 @@ class BasicLSTMCell(RNNCell):
           initializer=orthogonal_initializer)
       b = tf.get_variable("b", [4*self._num_units])
 
+      if not self._is_training:
+        tf.scalar_summary('W_norm', tf.global_norm([W]))
+        tf.scalar_summary('H_norm', tf.global_norm([H]))
+
   def __call__(self, inputs, state, time_step):
     with tf.variable_scope("BasicLSTMCell", reuse=True):
       H = tf.get_variable("H")
@@ -96,6 +100,13 @@ class BasicLSTMCell(RNNCell):
 
     new_c = c * tf.sigmoid(f + self._forget_bias) + tf.sigmoid(i) * tf.tanh(j)
     new_h = tf.tanh(new_c) * tf.sigmoid(o)
+    if not self._is_training and time_step in [0, 1, 2, 3, 4, 5, 49, 99]:
+      variable_summaries(new_c, "new_c/%s" % time_step)
+      variable_summaries(new_h, "new_h/%s" % time_step)
+      variable_summaries(i, "i/%s" % time_step)
+      variable_summaries(j, "j/%s" % time_step)
+      variable_summaries(f, "f/%s" % time_step)
+      variable_summaries(o, "o/%s" % time_step)
 
     return new_h, tf.concat(1, [new_c, new_h])
 
@@ -164,6 +175,24 @@ class BNLSTMCell(BasicLSTMCell):
     new_c_bn = _batch_norm(self._is_training, new_c,
                            cmean, cvar, cgamma, cbeta)
     new_h = tf.tanh(new_c_bn) * tf.sigmoid(o)
+
+    if not self._is_training and time_step in [0, 1, 2, 3, 4, 5, 49, 99]:
+      variable_summaries(new_c, "new_c/%s" % time_step)
+      variable_summaries(new_h, "new_h/%s" % time_step)
+      variable_summaries(i, "i/%s" % time_step)
+      variable_summaries(j, "j/%s" % time_step)
+      variable_summaries(f, "f/%s" % time_step)
+      variable_summaries(o, "o/%s" % time_step)
+      variable_summaries(xmean, "xmean/%s" % time_step)
+      variable_summaries(hmean, "hmean/%s" % time_step)
+      variable_summaries(cmean, "cmean/%s" % time_step)
+      variable_summaries(xvar, "xvar/%s" % time_step)
+      variable_summaries(hvar, "hvar/%s" % time_step)
+      variable_summaries(cvar, "cvar/%s" % time_step)
+      variable_summaries(xgamma, "xgamma/%s" % time_step)
+      variable_summaries(hgamma, "hgamma/%s" % time_step)
+      variable_summaries(cgamma, "cgamma/%s" % time_step)
+      variable_summaries(cbeta, "cbeta/%s" % time_step)
 
     return new_h, tf.concat(1, [new_c, new_h])
 

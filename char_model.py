@@ -98,6 +98,9 @@ class CharacterModel(object):
         raise ValueError('Invalid optimizer: %s' % config.optimizer)
       self._train_op = optimizer.apply_gradients(zip(grads, tvars))
 
+    if not config.is_training:
+      self.merged_summaries = tf.merge_all_summaries()
+
   @property
   def config(self):
     return self._config
@@ -167,16 +170,25 @@ class CharacterModel(object):
     else:
       train_op = tf.no_op()
 
+    if summary_writer:
+      # is None if no summary vars
+      summary_op = self.merged_summaries
+    else:
+      summary_op = tf.no_op()
+
     for inputs, labels, i, num_batches in data_iterator:
       # don't save the state, exactly seq_length sequences for now.
       # loss, perp, _, state = sess.run(
-      loss, perp, _ = sess.run(
-          [self.loss, self.perplexity, train_op],
+      loss, perp, _, summary = sess.run(
+          [self.loss, self.perplexity, train_op, summary_op],
           feed_dict={self.input_seq: inputs,
                      self.target_seq: labels,
                      self.initial_state: state})
       losses.append(loss)
       perplexities.append(perp)
+
+      if i == 1 and summary_writer:
+        summary_writer.add_summary(summary, step)
 
       if verbose and (i % 10 == 0 or i == num_batches-1):
         sys.stdout.write('\r{} / {} : loss = {:.4f}, perp = {:.3f}'.format(
