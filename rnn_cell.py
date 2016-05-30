@@ -95,7 +95,15 @@ class BasicRNNCell(RNNCell):
       b = tf.get_variable("b")
 
     # h_new = f(hH + xW + b)
-    new_h = self._activation(tf.matmul(inputs, W) + tf.matmul(states, H) + b)
+    hH = tf.matmul(states, H)
+    xW = tf.matmul(inputs, W)
+    new_h = self._activation(xW + hH + b)
+
+    if not self._is_training and time_step in [0, 1, 2, 3, 4, 5, 49, 99]:
+      variable_summaries(new_h, "new_h/%s" % time_step)
+      variable_summaries(hH, "hH/%s" % time_step)
+      variable_summaries(xW, "xW/%s" % time_step)
+      variable_summaries(b, "b/%s" % time_step)
 
     return new_h, new_h
 
@@ -124,8 +132,8 @@ class BNRNNCell(BasicRNNCell):
 
   def __call__(self, inputs, states, time_step):
     with tf.variable_scope("RNNBatchNorm", reuse=True):
-      xgamma = tf.get_variable("xgamma", initializer=tf.ones([num_units])/10)
-      hgamma = tf.get_variable("hgamma", initializer=tf.ones([num_units])/10)
+      xgamma = tf.get_variable("xgamma")
+      hgamma = tf.get_variable("hgamma")
 
     with tf.variable_scope("BasicRNNCell", reuse=True):
       H = tf.get_variable("H")
@@ -143,11 +151,25 @@ class BNRNNCell(BasicRNNCell):
           initializer=tf.ones([self._num_units]), trainable=False)
 
     # h_new = f(BN(hH) + BN(xW) + b)
-    bn_x = _batch_norm(self._is_training, tf.matmul(inputs, W),
-                       xmean, xvar, xgamma)
-    bn_h = _batch_norm(self._is_training, tf.matmul(states, H),
-                       hmean, hvar, hgamma)
+    xW = tf.matmul(inputs, W)
+    hH = tf.matmul(states, H)
+    bn_x = _batch_norm(self._is_training, xW, xmean, xvar, xgamma)
+    bn_h = _batch_norm(self._is_training, hH, hmean, hvar, hgamma)
     new_h = self._activation(bn_x + bn_h + b)
+
+    if not self._is_training and time_step in [0, 1, 2, 3, 4, 5, 49, 99]:
+      variable_summaries(new_h, "new_h/%s" % time_step)
+      variable_summaries(hH, "hH/%s" % time_step)
+      variable_summaries(xW, "xW/%s" % time_step)
+      variable_summaries(b, "b/%s" % time_step)
+      variable_summaries(xmean, "xmean/%s" % time_step)
+      variable_summaries(hmean, "hmean/%s" % time_step)
+      variable_summaries(xvar, "xvar/%s" % time_step)
+      variable_summaries(hvar, "hvar/%s" % time_step)
+      variable_summaries(xgamma, "xgamma/%s" % time_step)
+      variable_summaries(hgamma, "hgamma/%s" % time_step)
+      variable_summaries(bn_x, "bn_x/%s" % time_step)
+      variable_summaries(bn_h, "bn_h/%s" % time_step)
 
     return new_h, new_h
 
