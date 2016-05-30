@@ -163,7 +163,7 @@ class CharacterModel(object):
     """Runs one epoch of training."""
     start_time = time.time()
     losses, perplexities = [], []
-    state, = sess.run([self.zero_state])
+    state = np.zeros([self._config.batch_size, self._cell.state_size])
 
     if self._config.is_training:
       train_op = self.train_op
