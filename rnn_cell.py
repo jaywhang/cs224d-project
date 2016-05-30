@@ -68,6 +68,90 @@ class RNNCell(object):
     return zeros
 
 
+class BasicRNNCell(RNNCell):
+  def __init__(self, is_training, num_units,
+               activation='tanh', input_size=None):
+    self._num_units = num_units
+    self._is_training = is_training
+    self._input_size = input_size
+    if activation == 'tanh':
+      self._activation = tf.tanh
+    elif activation == 'relu':
+      self._activation = tf.nn.relu
+    elif activation == 'sigmoid':
+      self._activation = tf.sigmoid
+    else:
+      raise ValueError("Unknown activation %s" % activation)
+
+    with tf.variable_scope("BasicRNNCell"):
+      tf.get_variable("H", [self._num_units, self._num_units])
+      tf.get_variable("W", [self._input_size, self._num_units])
+      tf.get_variable("b", [self._num_units])
+
+  def __call__(self, inputs, states, time_step):
+    with tf.variable_scope("BasicRNNCell", reuse=True):
+      H = tf.get_variable("H")
+      W = tf.get_variable("W")
+      b = tf.get_variable("b")
+
+    # h_new = f(hH + xW + b)
+    new_h = self._activation(tf.matmul(inputs, W) + tf.matmul(states, H) + b)
+
+    return new_h, new_h
+
+  @property
+  def input_size(self):
+    return self._input_size
+
+  @property
+  def output_size(self):
+    return self._num_units
+
+  @property
+  def state_size(self):
+    return self._num_units
+
+
+class BNRNNCell(BasicRNNCell):
+  def __init__(self, is_training, num_units,
+               activation='tanh', input_size=None):
+    super(BNRNNCell, self).__init__(is_training, num_units,
+                                    activation=activation,
+                                    input_size = input_size)
+    with tf.variable_scope("RNNBatchNorm"):
+      tf.get_variable("xgamma", initializer=tf.ones([num_units])/10)
+      tf.get_variable("hgamma", initializer=tf.ones([num_units])/10)
+
+  def __call__(self, inputs, states, time_step):
+    with tf.variable_scope("RNNBatchNorm", reuse=True):
+      xgamma = tf.get_variable("xgamma", initializer=tf.ones([num_units])/10)
+      hgamma = tf.get_variable("hgamma", initializer=tf.ones([num_units])/10)
+
+    with tf.variable_scope("BasicRNNCell", reuse=True):
+      H = tf.get_variable("H")
+      W = tf.get_variable("W")
+      b = tf.get_variable("b")
+
+    with tf.variable_scope("BNRNN-Stats-T%s" % time_step):
+      xmean = tf.get_variable("xmean",
+          initializer=tf.zeros([self._num_units]), trainable=False)
+      xvar = tf.get_variable("xvar",
+          initializer=tf.ones([self._num_units]), trainable=False)
+      hmean = tf.get_variable("hmean",
+          initializer=tf.zeros([self._num_units]), trainable=False)
+      hvar = tf.get_variable("hvar",
+          initializer=tf.ones([self._num_units]), trainable=False)
+
+    # h_new = f(BN(hH) + BN(xW) + b)
+    bn_x = _batch_norm(self._is_training, tf.matmul(inputs, W),
+                       xmean, xvar, xgamma)
+    bn_h = _batch_norm(self._is_training, tf.matmul(states, H),
+                       hmean, hvar, hgamma)
+    new_h = self._activation(bn_x + bn_h + b)
+
+    return new_h, new_h
+
+
 class BasicLSTMCell(RNNCell):
 
   def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
@@ -76,7 +160,6 @@ class BasicLSTMCell(RNNCell):
     self._forget_bias = forget_bias
     self._is_training = is_training
 
-    # h' = hH + xW + b
     with tf.variable_scope("BasicLSTMCell"):
       H = tf.get_variable("H", [self._num_units, 4*self._num_units],
           initializer=orthogonal_initializer)
@@ -90,6 +173,7 @@ class BasicLSTMCell(RNNCell):
       W = tf.get_variable("W")
       b = tf.get_variable("b")
 
+    # [i, j, f, o] = hH + xW + b
     c, h = tf.split(1, 2, state)
     concat = tf.matmul(h, H) + tf.matmul(inputs, W) + b
     i, j, f, o = tf.split(1, 4, concat)
@@ -240,18 +324,6 @@ class BNGRUCell(GRUCell):
         tf.get_variable("hx_beta", initializer=tf.zeros([num_units]))
         tf.get_variable("hh_gamma", initializer=tf.ones([num_units])/10)
         tf.get_variable("hh_beta", initializer=tf.zeros([num_units]))
-
-  @property
-  def state_size(self):
-    return self._num_units
-
-  @property
-  def input_size(self):
-    return self._input_size
-
-  @property
-  def output_size(self):
-    return self._num_units
 
   def __call__(self, inputs, state, time_step):
     with tf.variable_scope("GRUBatchNorm", reuse=True):
