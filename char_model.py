@@ -36,6 +36,16 @@ class CharacterModel(object):
     elif config.cell_type == 'bngru.simple':
       cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
                                 full_bn=False)
+    elif config.cell_type.startswith('rnn.'):
+      _, _activation = config.cell_type.split('.')
+      assert _activation in ('tanh', 'relu', 'sigmoid'), _activation
+      cell = rnn_cell.BasicRNNCell(config.is_training, config.hidden_size,
+                                   activation=_activation)
+    elif config.cell_type.startswith('bnrnn.'):
+      _, _activation = config.cell_type.split('.')
+      assert _activation in ('tanh', 'relu', 'sigmoid'), _activation
+      cell = rnn_cell.BNRNNCell(config.is_training, config.hidden_size,
+                                activation=_activation)
     else:
       raise ValueError('Unknown cell_type: %s' % config.cell_type)
 
