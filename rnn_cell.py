@@ -239,9 +239,16 @@ class GRUCell(RNNCell):
     # h_tilde = x*Wh + r o (h * Hh)
     # h_new = u o h + (1-u) o tanh(h_tilde)
     concat = tf.matmul(inputs, W) + tf.matmul(state, H) + B + self._bias
-    r, u = tf.split(1, 2, tf.sigmoid(concat))
-    h_tilde = tf.matmul(inputs, Wh) + r * tf.matmul(state, Hh)
-    new_h = u * state + (1 - u) * tf.tanh(h_tilde)
+    r, u = tf.split(1, 2, concat)
+    sig_r, sig_u = tf.sigmoid(r), tf.sigmoid(u)
+    h_tilde = tf.matmul(inputs, Wh) + sig_r * tf.matmul(state, Hh)
+    new_h = sig_u * state + (1 - sig_u) * tf.tanh(h_tilde)
+
+    if not self._is_training and time_step in [0, 1, 2, 3, 4, 5, 49, 99]:
+      variable_summaries(new_h, "new_h/%s" % time_step)
+      variable_summaries(r, "r/%s" % time_step)
+      variable_summaries(u, "u/%s" % time_step)
+      variable_summaries(h_tilde, "h_tilde/%s" % time_step)
 
     return new_h, new_h
 
@@ -342,18 +349,45 @@ class BNGRUCell(GRUCell):
     bn_h = _batch_norm(self._is_training, tf.matmul(state, H),
                        hmean, hvar, hgamma)
     concat = bn_x + bn_h + B + self._bias
-    r, u = tf.split(1, 2, tf.sigmoid(concat))
+    r, u = tf.split(1, 2, concat)
+    sig_r, sig_u = tf.sigmoid(r), tf.sigmoid(u)
     if self._full_bn:
       bn_Wh = _batch_norm(self._is_training, tf.matmul(inputs, Wh),
                           hx_mean, hx_var, hx_gamma, hx_beta)
       bn_Hh = _batch_norm(self._is_training, tf.matmul(state, Hh),
                           hh_mean, hh_var, hh_gamma, hh_beta)
-      h_tilde = bn_Wh + r * bn_Hh
+      h_tilde = bn_Wh + sig_r * bn_Hh
     else:
-      h_tilde = tf.matmul(inputs, Wh) + r * tf.matmul(state, Hh)
+      h_tilde = tf.matmul(inputs, Wh) + sig_r * tf.matmul(state, Hh)
     bn_h_tilde = _batch_norm(self._is_training, h_tilde,
                              mmean, mvar, mgamma, mbeta)
-    new_h = u * state + (1 - u) * tf.tanh(bn_h_tilde)
+    new_h = sig_u * state + (1 - sig_u) * tf.tanh(bn_h_tilde)
+
+    if not self._is_training and time_step in [0, 1, 2, 3, 4, 5, 49, 99]:
+      variable_summaries(new_h, "new_h/%s" % time_step)
+      variable_summaries(r, "r/%s" % time_step)
+      variable_summaries(u, "u/%s" % time_step)
+      variable_summaries(h_tilde, "h_tilde/%s" % time_step)
+      variable_summaries(xmean, "xmean/%s" % time_step)
+      variable_summaries(xvar, "xvar/%s" % time_step)
+      variable_summaries(hmean, "hmean/%s" % time_step)
+      variable_summaries(hvar, "hvar/%s" % time_step)
+      variable_summaries(mmean, "mmean/%s" % time_step)
+      variable_summaries(mvar, "mvar/%s" % time_step)
+      variable_summaries(xgamma, "xgamma/%s" % time_step)
+      variable_summaries(hgamma, "hgamma/%s" % time_step)
+      variable_summaries(mgamma, "mgamma/%s" % time_step)
+      variable_summaries(mbeta, "mbeta/%s" % time_step)
+
+      if full_bn:
+        variable_summaries(hx_mean, "hx_mean/%s" % time_step)
+        variable_summaries(hx_var, "hx_var/%s" % time_step)
+        variable_summaries(hh_mean, "hh_mean/%s" % time_step)
+        variable_summaries(hh_var, "hh_var/%s" % time_step)
+        variable_summaries(hx_gamma, "hx_gamma/%s" % time_step)
+        variable_summaries(hx_beta, "hx_beta/%s" % time_step)
+        variable_summaries(hh_gamma, "hh_gamma/%s" % time_step)
+        variable_summaries(hh_beta, "hh_beta/%s" % time_step)
 
     return new_h, new_h
 

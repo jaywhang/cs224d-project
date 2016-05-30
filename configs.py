@@ -31,7 +31,7 @@ class CharacterModelLSTMConfig(object):
     self.max_epoch = 50
     self.max_grad_norm = 1.0
     self.vocab_size = vocab_size
-    self.optimizer = 'adam'  # or 'sgd'
+    self.optimizer = 'adam'  # or 'sgd', 'adagrad'
     self.cell_type = 'lstm'  # or 'bnlstm', 'gru', 'bngru.full', 'bngru.simple'
     self.is_training = True
     self.eval_frequency = None  # by default eval every epoch.
