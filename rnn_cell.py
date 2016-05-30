@@ -73,7 +73,7 @@ class BasicRNNCell(RNNCell):
                activation='tanh', input_size=None):
     self._num_units = num_units
     self._is_training = is_training
-    self._input_size = input_size
+    self._input_size = input_size or num_units
     if activation == 'tanh':
       self._activation = tf.tanh
     elif activation == 'relu':
