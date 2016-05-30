@@ -94,6 +94,8 @@ class CharacterModel(object):
         optimizer = tf.train.AdamOptimizer(config.learning_rate)
       elif config.optimizer == 'sgd':
         optimizer = tf.train.GradientDescentOptimizer(config.learning_rate)
+      elif config.optimizer == 'adagrad':
+        optimizer = tf.train.AdagradOptimizer(config.learning_rate)
       else:
         raise ValueError('Invalid optimizer: %s' % config.optimizer)
       self._train_op = optimizer.apply_gradients(zip(grads, tvars))
