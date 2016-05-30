@@ -379,7 +379,7 @@ class BNGRUCell(GRUCell):
       variable_summaries(mgamma, "mgamma/%s" % time_step)
       variable_summaries(mbeta, "mbeta/%s" % time_step)
 
-      if full_bn:
+      if self._full_bn:
         variable_summaries(hx_mean, "hx_mean/%s" % time_step)
         variable_summaries(hx_var, "hx_var/%s" % time_step)
         variable_summaries(hh_mean, "hh_mean/%s" % time_step)
