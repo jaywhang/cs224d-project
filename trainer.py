@@ -1,4 +1,4 @@
-import matplotlib
+i0mport matplotlib
 matplotlib.use('Agg')  # Avoid requiring X server.
 
 from copy import deepcopy
@@ -38,7 +38,7 @@ def get_config(vocab_size, inference=False):
   config = CharacterModelLSTMConfig(vocab_size)
 
   # Override values specified in commandline flags.
-  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp', 'mgn', 'ef']
+  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp', 'mgn', 'ef', 'op']
 
   for param in params:
     value = getattr(FLAGS, param)
