@@ -29,6 +29,7 @@ flags.DEFINE_float('kp', None, 'keep_prob')
 flags.DEFINE_float('mgn', None, 'max_grad_norm')
 # how often to evaluate on valid data.  either not set or a number.
 flags.DEFINE_integer('ef', None, 'eval_frequency')
+flags.DEFINE_integer('op', None, 'optimizer')
 
 
 FLAGS = flags.FLAGS
