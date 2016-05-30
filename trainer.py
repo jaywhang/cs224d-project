@@ -1,4 +1,4 @@
-i0mport matplotlib
+import matplotlib
 matplotlib.use('Agg')  # Avoid requiring X server.
 
 from copy import deepcopy
