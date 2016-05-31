@@ -36,9 +36,15 @@ This branch doesn't support restarting and TensorBoard stuff for now.
 Inside `results` folder, run:
 
     ./plot_graphs.py \
+        -a \             # Needed if you want to use folder names as labels
         bs_64_ct_bnlstm_hs_300_kp_1.0_lr_0.002_mgn_1.0_op_adam_sl_100_vs_50 \
         bs_64_ct_lstm_hs_300_kp_1.0_lr_0.002_mgn_1.0_op_adam_sl_100_vs_50
 
-The output file is called `valid_losses.pdf`.
+Specifying labels:
+    ./plot_graphs.py \
+        path/to/folder1 label_for_folder1 \
+        path/to/folder2 label_for_folder2 \
+        path/to/folder3 label_for_folder3
 
+The output files are named `valid_losses.pdf` and `valid_pps.pdf`.
 
