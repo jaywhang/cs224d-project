@@ -80,8 +80,10 @@ class BasicLSTMCell(RNNCell):
     with tf.variable_scope("BasicLSTMCell"):
       H = tf.get_variable("H", [self._num_units, 4*self._num_units],
           initializer=orthogonal_initializer)
+      tf.add_to_collection("loss", tf.nn.l2_loss(H))
       W = tf.get_variable("W", [self._input_size, 4*self._num_units],
           initializer=orthogonal_initializer)
+      tf.add_to_collection("loss", tf.nn.l2_loss(W))
       b = tf.get_variable("b", [4*self._num_units])
 
       if not self._is_training:

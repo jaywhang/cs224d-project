@@ -16,6 +16,7 @@ FLAG_TO_NAME_MAP = {
     'op': 'optimizer',
     'ct': 'cell_type',
     'ef': 'eval_frequency',
+    'l2': 'l2',
 }
 
 
@@ -30,10 +31,12 @@ class CharacterModelLSTMConfig(object):
     self.learning_rate = 0.002
     self.max_epoch = 50
     self.max_grad_norm = 1.0
+    self.l2 = 0.002
     self.vocab_size = vocab_size
     self.optimizer = 'adam'  # or 'sgd', 'adagrad'
     self.cell_type = 'lstm'  # or 'bnlstm', 'gru', 'bngru.full', 'bngru.simple'
     self.is_training = True
+    self.eval_frequency = None  # by default eval every epoch.
     self.eval_frequency = None  # by default eval every epoch.
 
     # self.hidden_depth = 1  # not supported.
