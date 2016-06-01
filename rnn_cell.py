@@ -138,8 +138,8 @@ class BNLSTMCell(BasicLSTMCell):
       b = tf.get_variable("b", [4*self._num_units])
 
       if not self._is_training:
-        tf.scalar_summary('W_norm', tf.global_norm([W]))
-        tf.scalar_summary('H_norm', tf.global_norm([H]))
+        tf.scalar_summary('W_norm_BN', tf.global_norm([W]))
+        tf.scalar_summary('H_norm_BN', tf.global_norm([H]))
     with tf.variable_scope("LSTMBatchNorm"):
       tf.get_variable("xgamma", initializer=tf.ones([4*num_units])/10)
       tf.get_variable("hgamma", initializer=tf.ones([4*num_units])/10)
