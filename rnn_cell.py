@@ -128,6 +128,17 @@ class BNLSTMCell(BasicLSTMCell):
   def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
     super(BNLSTMCell, self).__init__(is_training, num_units,
                                      forget_bias, input_size)
+
+    with tf.variable_scope("BNLSTMCell"):
+      H = tf.get_variable("H", [self._num_units, 4*self._num_units],
+          initializer=orthogonal_initializer)
+      W = tf.get_variable("W", [self._input_size, 4*self._num_units],
+          initializer=orthogonal_initializer)
+      b = tf.get_variable("b", [4*self._num_units])
+
+      if not self._is_training:
+        tf.scalar_summary('W_norm', tf.global_norm([W]))
+        tf.scalar_summary('H_norm', tf.global_norm([H]))
     with tf.variable_scope("LSTMBatchNorm"):
       tf.get_variable("xgamma", initializer=tf.ones([4*num_units])/10)
       tf.get_variable("hgamma", initializer=tf.ones([4*num_units])/10)
@@ -135,7 +146,7 @@ class BNLSTMCell(BasicLSTMCell):
       tf.get_variable("cbeta", initializer=tf.zeros([num_units]))
 
   def __call__(self, inputs, state, time_step):
-    with tf.variable_scope("BasicLSTMCell", reuse=True):
+    with tf.variable_scope("BNLSTMCell", reuse=True):
       H = tf.get_variable("H")
       W = tf.get_variable("W")
       b = tf.get_variable("b")

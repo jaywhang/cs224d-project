@@ -49,4 +49,4 @@ class CharacterModelLSTMConfig(object):
 
     pairs = [flag + '_' + str(getattr(self, name))
              for flag, name in ordered_map.iteritems()]
-    return '_'.join(pairs)
+    return '_'.join(pairs) + "_partial_bn"

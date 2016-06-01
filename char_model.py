@@ -59,11 +59,15 @@ class CharacterModel(object):
     split_input = [tf.squeeze(_input, squeeze_dims=[1])
                    for _input in tf.split(1, config.seq_length, inputs)]
 
+    lstm_cell = rnn_cell.BasicLSTMCell(config.is_training, config.hidden_size)
     # Create the recurrent network.
     state = self._initial_state
     outputs = []
     for time_step in range(config.seq_length):
-      cell_output, state = cell(split_input[time_step], state, time_step)
+      if time_step < 10:
+        cell_output, state = cell(split_input[time_step], state, time_step)
+      else:
+        cell_output, state = lstm_cell(split_input[time_step], state, time_step)
       outputs.append(cell_output)
     self._final_state = state
 
