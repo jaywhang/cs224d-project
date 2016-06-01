@@ -126,9 +126,10 @@ class BasicLSTMCell(RNNCell):
 class BNLSTMCell(BasicLSTMCell):
 
   def __init__(self, is_training, num_units, forget_bias=1.0, input_size=None):
-    super(BNLSTMCell, self).__init__(is_training, num_units,
-                                     forget_bias, input_size)
-
+    self._num_units = num_units
+    self._input_size = input_size or num_units
+    self._forget_bias = forget_bias
+    self._is_training = is_training
     with tf.variable_scope("BNLSTMCell"):
       H = tf.get_variable("H", [self._num_units, 4*self._num_units],
           initializer=orthogonal_initializer)
