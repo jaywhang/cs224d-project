@@ -16,6 +16,7 @@ FLAG_TO_NAME_MAP = {
     'op': 'optimizer',
     'ct': 'cell_type',
     'ef': 'eval_frequency',
+    'pop': 'pop_step'
 }
 
 
@@ -29,6 +30,7 @@ class CharacterModelLSTMConfig(object):
     self.keep_prob = 0.5
     self.learning_rate = 0.002
     self.max_epoch = 50
+    self.pop_step = 100
     self.max_grad_norm = 1.0
     self.vocab_size = vocab_size
     self.optimizer = 'adam'  # or 'sgd', 'adagrad'

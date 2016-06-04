@@ -24,20 +24,21 @@ class CharacterModel(object):
     inputs = tf.gather(embedding, self._input_seq)
 
     # Hidden layers: stacked LSTM cells with Dropout.
-    if config.cell_type == 'lstm':
-      cell = rnn_cell.BasicLSTMCell(config.is_training, config.hidden_size)
-    elif config.cell_type == 'bnlstm':
-      cell = rnn_cell.BNLSTMCell(config.is_training, config.hidden_size)
-    elif config.cell_type == 'gru':
-      cell = rnn_cell.GRUCell(config.is_training, config.hidden_size)
-    elif config.cell_type == 'bngru.full':
-      cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
-                                full_bn=True)
-    elif config.cell_type == 'bngru.simple':
-      cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
-                                full_bn=False)
-    else:
-      raise ValueError('Unknown cell_type: %s' % config.cell_type)
+    with tf.variable_scope("RNN"):
+      if config.cell_type == 'lstm':
+        cell = rnn_cell.BasicLSTMCell(config.is_training, config.hidden_size)
+      elif config.cell_type == 'bnlstm':
+        cell = rnn_cell.BNLSTMCell(config.is_training, config.hidden_size)
+      elif config.cell_type == 'gru':
+        cell = rnn_cell.GRUCell(config.is_training, config.hidden_size)
+      elif config.cell_type == 'bngru.full':
+        cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
+                                  full_bn=True)
+      elif config.cell_type == 'bngru.simple':
+        cell = rnn_cell.BNGRUCell(config.is_training, config.hidden_size,
+                                  full_bn=False)
+      else:
+        raise ValueError('Unknown cell_type: %s' % config.cell_type)
 
     # Apply dropout if we're training.
     if config.is_training and config.keep_prob < 1.0:
@@ -60,12 +61,17 @@ class CharacterModel(object):
                    for _input in tf.split(1, config.seq_length, inputs)]
 
     # Create the recurrent network.
-    state = self._initial_state
-    outputs = []
-    for time_step in range(config.seq_length):
-      cell_output, state = cell(split_input[time_step], state, time_step)
-      outputs.append(cell_output)
-    self._final_state = state
+    with tf.variable_scope("RNN"):
+      state = self._initial_state
+      outputs = []
+      for time_step in range(config.seq_length):
+        if time_step > config.pop_step:
+          tf.get_variable_scope().reuse_variables()
+          cell_output, state = cell(split_input[time_step], state, config.pop_step)
+        else:
+          cell_output, state = cell(split_input[time_step], state, time_step)
+        outputs.append(cell_output)
+      self._final_state = state
 
     # Reshape the output to [(batch_size * seq_length), hidden_size]
     outputs = tf.reshape(tf.concat(1, outputs), [-1, config.hidden_size])

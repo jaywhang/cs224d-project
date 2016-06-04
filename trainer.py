@@ -30,6 +30,8 @@ flags.DEFINE_float('mgn', None, 'max_grad_norm')
 # how often to evaluate on valid data.  either not set or a number.
 flags.DEFINE_integer('ef', None, 'eval_frequency')
 flags.DEFINE_string('op', None, 'optimizer')
+# time step to start using last pop statistics
+flags.DEFINE_integer('pop', None, 'pop_step')
 
 
 FLAGS = flags.FLAGS
@@ -39,11 +41,11 @@ def get_config(vocab_size, inference=False):
   config = CharacterModelLSTMConfig(vocab_size)
 
   # Override values specified in commandline flags.
-  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp', 'mgn', 'ef', 'op']
+  params = ['ct', 'me', 'bs', 'sl', 'lr', 'hs', 'kp', 'mgn', 'ef', 'op', 'pop']
 
   for param in params:
     value = getattr(FLAGS, param)
-    if value:
+    if value is not None:
       setattr(config, FLAG_TO_NAME_MAP[param], value)
 
   if inference:
