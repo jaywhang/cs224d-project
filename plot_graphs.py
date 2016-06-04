@@ -7,6 +7,7 @@ import csv, os, sys
 import numpy as np
 import matplotlib.pyplot as plt
 
+from collections import OrderedDict
 
 def read_training_info(output_dir):
   train_loss_pp, eval_loss_pp = [], []
@@ -27,24 +28,24 @@ def save_plots(data, output_dir):
   # Valid losses across different models.
   plt.clf()
   plt.grid(True)
-  plt.xlabel('Training Iterations')
-  plt.ylabel('Loss')
+  plt.xlabel('Training Iterations', fontsize=18)
+  plt.ylabel('Loss', fontsize=18)
   for name, (_, eval_loss_pp) in data.iteritems():
     iters, _, _, valid_losses, _ = zip(*eval_loss_pp)
-    plt.plot(iters, valid_losses, label=name)
-  plt.legend(fontsize=8)
+    plt.plot(iters, valid_losses, label=name, linewidth=2.0)
+  plt.legend(fontsize=18)
   plt.savefig(os.path.join(output_dir, 'valid_losses.pdf'))
   print('Created %s' % os.path.join(output_dir, 'valid_losses.pdf'))
 
   # Valid pps across different models.
   plt.clf()
   plt.grid(True)
-  plt.xlabel('Training Iterations')
-  plt.ylabel('Perplexity')
+  plt.xlabel('Training Iterations', fontsize=18)
+  plt.ylabel('Perplexity', fontsize=18)
   for name, (_, eval_loss_pp) in data.iteritems():
     iters, _, _, _, valid_pps = zip(*eval_loss_pp)
-    plt.plot(iters, valid_pps, label=name)
-  plt.legend(fontsize=8)
+    plt.plot(iters, valid_pps, label=name, linewidth=2.0)
+  plt.legend(fontsize=18)
   plt.savefig(os.path.join(output_dir, 'valid_pps.pdf'))
   print('Created %s' % os.path.join(output_dir, 'valid_pps.pdf'))
 
@@ -67,7 +68,7 @@ def main(argv):
     sys.exit(1)
 
   # Create {label: training_data} dict.
-  data = {}
+  data = OrderedDict()
   if argv[1] == '-a':
     for d in argv[2:]:
       if os.path.isdir(d):
